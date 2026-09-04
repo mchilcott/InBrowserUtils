@@ -143,10 +143,7 @@
       <div class="field">
         <label for="format">Format / codec</label>
         <select id="format">
-          <option value="video/webm;codecs=vp9">WebM · VP9 (smallest)</option>
-          <option value="video/webm;codecs=vp8">WebM · VP8</option>
-          <option value="video/webm">WebM · default</option>
-          <option value="video/mp4;codecs=h264">MP4 · H.264</option>
+          <option value="">(detecting available formats…)</option>
         </select>
       </div>
       <div class="field">
@@ -175,8 +172,9 @@
 
     <p class="note">
       Recordings happen entirely in your browser — nothing is uploaded anywhere.
-      Compression is handled by the video codec and bitrate you select
-      (VP9 / H.264 shaded output keeps files small). MIME type support varies by browser.
+      Compression is handled by the video codec and bitrate you select.
+      The Format list only shows codecs this browser can actually record; unsupported
+      options are omitted automatically.
     </p>
   </div>
 
@@ -205,6 +203,67 @@
     placeholder.style.display = 'none';
   }
 
+  // Populate the format dropdown with MIME types actually supported by this browser.
+  // The user only ever sees options that MediaRecorder can genuinely produce, so a chosen
+  // format never silently falls back to something else.
+  function populateFormats() {
+    const support = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported;
+    const formatEl = $('format');
+    formatEl.innerHTML = '';
+    if (!support) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = 'MediaRecorder not supported in this browser';
+      formatEl.appendChild(o);
+      formatEl.disabled = true;
+      return;
+    }
+
+    const candidates = [
+      ['video/webm;codecs=vp9', 'WebM · VP9 (smallest)'],
+      ['video/webm;codecs=vp8', 'WebM · VP8'],
+      ['video/webm;codecs=vp8,opus', 'WebM · VP8 + Opus'],
+      ['video/webm;codecs=vp9,opus', 'WebM · VP9 + Opus'],
+      ['video/webm', 'WebM · default'],
+      ['video/mp4;codecs=h264', 'MP4 · H.264'],
+      ['video/mp4;codecs=avc1.4d002a', 'MP4 · H.264 (high)'],
+      ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'MP4 · H.264 + AAC'],
+      ['video/mp4', 'MP4 · default'],
+      ['video/x-matroska;codecs=avc1', 'MKV · H.264'],
+    ];
+
+    const supported = [];
+    for (const [mime, label] of candidates) {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        const o = document.createElement('option');
+        o.value = mime;
+        o.textContent = label;
+        formatEl.appendChild(o);
+        supported.push(mime);
+      }
+    }
+
+    if (formatEl.options.length === 0) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = 'No recording formats available';
+      formatEl.appendChild(o);
+      formatEl.disabled = true;
+      return;
+    }
+
+    // Prefer a good default: VP9 if present, else the first WebM, else first option.
+    const preferred = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    let chosen = null;
+    for (const p of preferred) if (supported.includes(p)) { chosen = p; break; }
+    formatEl.value = chosen || formatEl.options[0].value;
+    const used = formatEl.value;
+    const name = formatEl.options[formatEl.selectedIndex].textContent;
+    setStatus('Available formats: ' + supported.map(m => m.split(';')[0]).join(', ') + '. Using ' + name + '.', false);
+  }
+
+  populateFormats();
+
   btnRecord.addEventListener('click', async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -213,12 +272,19 @@
       });
 
       const formatType = $('format').value;
-      const mimeType = MediaRecorder.isTypeSupported(formatType) ? formatType : 'video/webm';
+      if (!formatType) {
+        setStatus('No recording format available in this browser.', false);
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+      // The dropdown is populated only with isTypeSupported()==true formats, so use it as-is.
+      const mimeType = formatType;
 
       mediaRecorder = new MediaRecorder(stream, {
         mimeType,
         videoBitsPerSecond: parseInt($('bitrate').value, 10),
       });
+      setStatus('Recording ' + $('format').options[$('format').selectedIndex].textContent + '…', true);
 
       recordedChunks = [];
       mediaRecorder.ondataavailable = e => {
@@ -271,7 +337,9 @@
     if (recordedChunks.length === 0) return;
     const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
     const name = ($('filename').value.trim() || 'screen-recording');
-    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    const ext = blob.type.includes('mp4') ? 'mp4'
+      : blob.type.includes('matroska') ? 'mkv'
+      : 'webm';
 
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

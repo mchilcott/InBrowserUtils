@@ -164,9 +164,13 @@
     </div>
 
     <p class="note">
-      Uses the Web Bluetooth API (Chrome/Edge/Opera). Choose a device to pair; the GATT tree lists its
-      services, characteristics and their properties. Read/poll values, write bytes or text, and subscribe
-      to notifications. UUIDs are resolved against the <a href="https://www.bluetooth.com/specifications/assigned-numbers/" target="_blank" rel="noopener" style="color:var(--accent)">Bluetooth SIG assigned numbers</a>
+      Uses the <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API" target="_blank" rel="noopener" style="color:var(--accent)">Web Bluetooth API</a>,
+      which requires a <b>secure context</b> (https or localhost) and a browser that exposes it. Some Chromium builds
+      (including the Canonical snap) ships with Web Bluetooth disabled by default, in which case this page can't pair
+      devices. Fix: launch Chromium with <code>--enable-features=WebBluetooth</code>, or use Google Chrome. Choose a
+      device to pair; the GATT tree lists its services, characteristics and their properties. Read/poll values, write
+      bytes or text, and subscribe to notifications. UUIDs are resolved against the
+      <a href="https://www.bluetooth.com/specifications/assigned-numbers/" target="_blank" rel="noopener" style="color:var(--accent)">Bluetooth SIG assigned numbers</a>
       where known. Everything runs in your browser — nothing leaves the page.
     </p>
   </div>
@@ -252,6 +256,14 @@
     statusText.textContent = text;
     dot.className = 'dot' + (cls ? ' ' + cls : '');
   }
+
+  function checkSupport() {
+    if (!navigator.bluetooth) {
+      btnConnect.disabled = true;
+      setStatus('Web Bluetooth unavailable — this browser build has it disabled. Launch Chromium with --enable-features=WebBluetooth, or use Google Chrome.', 'error');
+    }
+  }
+  checkSupport();
 
   async function getServices() {
     try {
@@ -466,7 +478,7 @@
   btnConnect.addEventListener('click', async () => {
     try {
       if (!navigator.bluetooth) {
-        setStatus('Web Bluetooth API not supported in this browser.', 'error');
+        setStatus('Web Bluetooth is unavailable. This browser build appears to have it disabled — see note below.', 'error');
         return;
       }
       const raw = $('uuidInput').value.trim();

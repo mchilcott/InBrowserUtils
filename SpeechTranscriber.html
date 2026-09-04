@@ -135,10 +135,11 @@
     </div>
 
     <p class="note">
-      Uses the Web Speech API (<code>SpeechRecognition</code>), which is built into the browser — no external service.
-      Recognition is sent to your browser vendor's speech service (Chrome/Edge online, or Apple's on-device engine on
-      macOS Safari). Language and mode can be chosen; interim mode shows live text in blue. The transcript is editable in
-      place and can be saved as a text file.
+      Uses the Web Speech API (<code>SpeechRecognition</code>), which is built into the browser — no external service required.
+      Recognition is sent to your browser vendor's speech service: Chrome/Edge send audio to Google's <b>online</b>
+      service (needs network; if it's blocked you'll get a "network" error), while macOS Safari uses Apple's on-device
+      engine and works offline. Language and mode can be chosen; interim mode shows live text in blue. The transcript is
+      editable in place and can be saved as a text file.
     </p>
   </div>
 
@@ -210,19 +211,14 @@
     scrollBottom();
   }
 
-  function startRecognition() {
-    if (running) return;
-    if (!SR) return;
-    rec = createRecognizer();
-
-    rec.onstart = () => {
-      running = true;
+  function wireRecognizer(r) {
+    r.onstart = () => {
       btnStart.disabled = true;
       btnStop.disabled = false;
       setStatus('Listening…', 'rec');
     };
 
-    rec.onresult = e => {
+    r.onresult = e => {
       let interim = '';
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
@@ -235,26 +231,54 @@
       if (interim && intmode.value === 'interim') showInterim(interim);
     };
 
-    rec.onerror = e => {
+    r.onerror = e => {
+      // Always log to console so a failure isn't silent.
+      console.warn('SpeechRecognition error:', e.error, e);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        setStatus('Microphone permission denied.', '');
-        stopRecognition();
+        failRecognition('Microphone permission denied. Click Start to try again.');
       } else if (e.error === 'no-speech') {
         setStatus('No speech detected — still listening…', 'rec');
       } else if (e.error === 'network') {
-        setStatus('Network error — speech service unavailable.', '');
-        stopRecognition();
+        failRecognition('Cannot reach the speech service (network). Chrome/Edge send audio to Google\'s online service — check your connection, then click Start to retry.');
+      } else {
+        setStatus('Recognition error (' + e.error + ') — retrying…', 'rec');
       }
     };
 
-    rec.onend = () => {
-      // SpeechRecognition auto-stops on silence/error; keep recording by restarting.
-      if (running) {
-        reconnectTimeout = setTimeout(() => { if (running) { rec.start(); } }, 200);
-      }
+    // SpeechRecognition auto-stops on silence/error; keep recording by restarting.
+    // Recreate the recognizer each time (reusing a stopped object can throw
+    // InvalidStateError in Chromium), wrapped in try/catch so a transient
+    // failure can never permanently kill the loop.
+    r.onend = () => {
+      if (running) scheduleRestart();
     };
+  }
 
-    try { rec.start(); } catch (e) { rec = null; }
+  function scheduleRestart() {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(bootRecognizer, 200);
+  }
+
+  function bootRecognizer() {
+    if (!running || !SR) return;
+    try {
+      rec = createRecognizer();
+      wireRecognizer(rec);
+      rec.start();
+    } catch (err) {
+      console.warn('SpeechRecognition start failed:', err);
+      // Transient state issue — retry a moment later instead of giving up.
+      scheduleRestart();
+    }
+  }
+
+  function startRecognition() {
+    if (running) return;
+    if (!SR) return;
+    running = true;
+    btnStop.disabled = true;
+    setStatus('Starting…', '');
+    bootRecognizer();
   }
 
   function stopRecognition() {
@@ -264,6 +288,18 @@
     btnStart.disabled = false;
     btnStop.disabled = true;
     setStatus('Stopped', 'ok');
+  }
+
+  // Terminate the recognition loop after a fatal error while keeping a clear,
+  // specific message (rather than overwriting it with the generic "Stopped"),
+  // and re-enable Start so the user can retry.
+  function failRecognition(msg) {
+    running = false;
+    if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+    if (rec) { try { rec.abort(); } catch (e) {} rec = null; }
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    setStatus(msg, '');
   }
 
   btnStart.addEventListener('click', startRecognition);
