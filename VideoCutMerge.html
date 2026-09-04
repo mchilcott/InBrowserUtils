@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VideoCutMerge</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: min(1080px, 100%);
+  }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--bg);
+    transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: 0.9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--accent); }
+  .btn-stop { background: var(--danger); color: #fff; }
+  .btn-action { background: var(--ok); color: #052e16; }
+  .btn-ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-small { padding: 5px 9px; font-size: 0.75rem; }
+  .panel {
+    background: #0a1220;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 0.95rem;
+    padding: 9px 14px;
+    background: #0e1830;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .label { color: var(--muted); font-size: 0.8rem; }
+  .note { color: var(--muted); font-size: 0.8rem; margin-top: 14px; line-height: 1.5; }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop-zone.drag { border-color: var(--accent); background: rgba(56,189,248,.08); color: var(--text); }
+
+  .media-list { max-height: 160px; overflow-y: auto; margin-top: 12px; }
+  .media-item, .clip-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .media-item:hover, .media-item.selected { background: var(--panel-2); }
+  .media-item.selected { outline: 1px solid var(--accent); }
+  .media-item .dur { color: var(--muted); font-size: 0.75em; }
+  .thumb { width: 48px; height: 34px; object-fit: cover; border-radius: 4px; background: #000; flex: none; }
+
+  .preview-wrap {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 16px;
+    margin-top: 12px;
+  }
+  @media (max-width: 760px) { .preview-wrap { grid-template-columns: 1fr; } }
+  video.preview {
+    width: 100%;
+    background: #000;
+    border-radius: 8px;
+    aspect-ratio: 16/9;
+    max-height: 260px;
+  }
+  .trim-controls { display: flex; flex-direction: column; gap: 10px; }
+  .trim-controls .label { display: block; margin-bottom: 3px; }
+  .trim-controls input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .time-row { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text); }
+  .time-input { display: flex; gap: 6px; align-items: center; }
+  .time-input input[type="number"] {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 5px 8px; width: 70px; font-size: 0.8rem;
+  }
+
+  .timeline { min-height: 90px; margin-top: 12px; max-height: 240px; overflow-y: auto; }
+  .clip-item { background: var(--panel-2); justify-content: space-between; }
+  .clip-item.selected { outline: 1px solid var(--accent); }
+  .clip-meta { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .clip-meta .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clip-actions { display: flex; gap: 6px; flex: none; }
+  .handle { cursor: grab; color: var(--muted); font-size: 1rem; user-select: none; padding-right: 4px; }
+  .render-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 4px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { color: var(--muted); font-size: 0.8rem; }
+  select, input[type="text"] {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 8px 12px; font-size: 0.9rem;
+  }
+  .progress { margin-top: 12px; }
+  .progress-bar { height: 8px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
+</style>
+</head>
+<body>
+  <h1>✂️ VideoCutMerge</h1>
+  <p class="sub">Cut clips from your videos and concatenate them into one file — all in the browser</p>
+
+  <div class="card">
+    <div class="drop-zone" id="dropZone">
+      🎬 Drop videos here, or <b>click to add files</b>
+      <input type="file" id="fileInput" accept="video/*" multiple hidden>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>📚 Media library</h2>
+      <div class="media-list" id="mediaList"><span class="label" style="padding:10px">No videos loaded yet</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>✂️ Trim &amp; Preview</h2>
+      <div id="trimEmpty" class="label" style="padding:12px">Select a video from the library to set start/end points.</div>
+      <div class="preview-wrap" id="previewWrap" style="display:none">
+        <video class="preview" id="preview" controls></video>
+        <div class="trim-controls">
+          <div>
+            <span class="label">Start point</span>
+            <input type="range" id="startRange" min="0" max="1000" value="0" step="1">
+            <div class="time-row"><span id="startTime">0:00.000</span><span id="clipLen">0.0s</span></div>
+          </div>
+          <div>
+            <span class="label">End point</span>
+            <input type="range" id="endRange" min="0" max="1000" value="1000" step="1">
+            <div class="time-row"><span id="endTime">0:00.000</span></div>
+          </div>
+          <div class="time-input">
+            <span class="label">Start</span>
+            <input type="number" id="startNum" step="0.01" min="0">
+            <span class="label">End</span>
+            <input type="number" id="endNum" step="0.01" min="0">
+            <span class="label">(s)</span>
+          </div>
+          <button id="btnPlayClip" class="btn-action btn-small" style="align-self:flex-start">▶ Preview Clip</button>
+          <button id="btnAddClip" class="btn-start btn-small" style="align-self:flex-start" disabled>＋ Add to Timeline</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>🎞 Timeline <span class="label" id="timelineCount"></span></h2>
+      <div class="timeline" id="timeline"><span class="label" style="padding:10px">No clips yet — trim and add some.</span></div>
+      <div class="render-row" style="margin-top:12px">
+        <div class="field">
+          <label for="fps">Render frame rate</label>
+          <select id="fps">
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+            <option value="24">24 fps</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:180px">
+          <label for="filename">Output file name</label>
+          <input type="text" id="filename" value="merged-video" placeholder="merged-video">
+        </div>
+        <button id="btnRender" class="btn-action" disabled>▶ Render</button>
+        <button id="btnCancel" class="btn-stop" disabled>■ Stop</button>
+        <button id="btnClearAll" class="btn-ghost" disabled>Clear Timeline</button>
+      </div>
+      <div class="progress" id="progress" style="display:none">
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:4px">
+          <span id="progressText">Rendering…</span><span id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+
+    <p class="note">
+      Rendering replays each clip onto a single canvas and records it in one continuous pass with the
+      <code>MediaRecorder</code> API, producing a single valid file with the clips in sequence. The output
+      uses the format/codec selected (WebM on most browsers; MP4/H.264 where supported). Mixed-resolution clips
+      are fitted onto a black canvas of the first clip's size. No external service is contacted — editing happens
+      entirely on this page.
+    </p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const dropZone = $('dropZone');
+  const fileInput = $('fileInput');
+  const mediaList = $('mediaList');
+  const trimEmpty = $('trimEmpty');
+  const previewWrap = $('previewWrap');
+  const preview = $('preview');
+  const startRange = $('startRange');
+  const endRange = $('endRange');
+  const startTimeEl = $('startTime');
+  const endTimeEl = $('endTime');
+  const clipLenEl = $('clipLen');
+  const startNum = $('startNum');
+  const endNum = $('endNum');
+  const btnPlayClip = $('btnPlayClip');
+  const btnAddClip = $('btnAddClip');
+  const timelineEl = $('timeline');
+  const timelineCount = $('timelineCount');
+  const btnRender = $('btnRender');
+  const btnCancel = $('btnCancel');
+  const btnClearAll = $('btnClearAll');
+  const progress = $('progress');
+  const progressText = $('progressText');
+  const progressPct = $('progressPct');
+  const progressFill = $('progressFill');
+
+  let mediaFiles = [];        // { id, name, url, duration, thumb }
+  let selectedMedia = null;   // id of selected media
+  let clips = [];             // { id, mediaId, start, end, name }
+  let selectedClip = null;    // id of selected clip
+  let renderState = null;     // cancels
+  let cancelReq = null;       // set to () => {} during render to abort
+
+  function fmtTime(sec) {
+    sec = Math.max(0, sec || 0);
+    const m = Math.floor(sec / 60);
+    const s = (sec - m * 60).toFixed(3);
+    return `${m}:${s.padStart(6, '0')}`;
+  }
+
+  function isFiniteNum(v) { return typeof v === 'number' && Number.isFinite(v) && v > 0; }
+
+  function measureDuration(url) {
+    return new Promise(resolve => {
+      const probe = document.createElement('video');
+      probe.preload = 'auto';
+      probe.muted = true;
+      probe.playsInline = true;
+      probe.style.display = 'none';
+      document.body.appendChild(probe);
+      let settled = false;
+      let measureTimer = null;
+
+      const done = dur => {
+        if (settled) return;
+        settled = true;
+        if (measureTimer) clearInterval(measureTimer);
+        probe.pause();
+        probe.removeAttribute('src');
+        probe.load();
+        probe.remove();
+        resolve(isFiniteNum(dur) ? dur : 0);
+      };
+
+      const startMeasure = attemptSeekMeasure => {
+        const d = probe.duration;
+        if (isFiniteNum(d)) return done(d);
+        // duration is Infinity (e.g. some WebM/Matroska / fragmented MP4):
+        // resolve it by seeking far ahead, which forces the player to compute a real duration.
+        if (attemptSeekMeasure) {
+          try { probe.currentTime = 1e12; } catch (e) {}
+        }
+      };
+
+      probe.onloadedmetadata = () => startMeasure(true);
+      probe.ondurationchange = () => {
+        if (isFiniteNum(probe.duration)) done(probe.duration);
+      };
+      probe.onseeked = () => {
+        if (isFiniteNum(probe.duration)) done(probe.duration);
+      };
+      probe.onerror = () => done(0);
+
+      // Poll: some players only reveal duration after seeking settles.
+      const t0 = Date.now();
+      measureTimer = setInterval(() => {
+        if (isFiniteNum(probe.duration)) { done(probe.duration); return; }
+        if (Date.now() - t0 > 6000) done(0);
+      }, 100);
+
+      setTimeout(() => done(isFiniteNum(probe.duration) ? probe.duration : 0), 12000);
+      probe.src = url;
+    });
+  }
+
+  function makeThumbnail(url) {
+    return new Promise(resolve => {
+      const v = document.createElement('video');
+      v.muted = true;
+      v.playsInline = true;
+      v.preload = 'auto';
+      v.style.display = 'none';
+      document.body.appendChild(v);
+      const done = () => { v.removeAttribute('src'); v.load(); v.remove(); };
+      const canvas = document.createElement('canvas');
+      canvas.width = 96; canvas.height = 68;
+      const ctx = canvas.getContext('2d');
+      v.onloadeddata = () => {
+        try {
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 96, 68);
+          const w = v.videoWidth, h = v.videoHeight;
+          const srcW = 96, srcH = 68;
+          ctx.drawImage(v, 0, 0, w, h, 0, 0, srcW, srcH);
+          resolve(canvas.toDataURL());
+        } catch (e) { resolve(''); }
+        done();
+      };
+      v.onerror = () => { resolve(''); done(); };
+      setTimeout(() => { resolve(''); done(); }, 6000);
+      v.src = url;
+      v.currentTime = 0;
+    });
+  }
+
+  async function addMedia(file) {
+    if (!file.type.startsWith('video/')) return;
+    const id = 'm' + Date.now() + Math.random().toString(36).slice(2, 7);
+    const url = URL.createObjectURL(file);
+    const entry = { id, name: file.name, url, duration: 0, file };
+    mediaFiles.push(entry);
+    const [dur, thumb] = await Promise.all([measureDuration(url), makeThumbnail(url)]);
+    entry.duration = dur;
+    entry.thumb = thumb;
+    if (dur && selectedMedia === entry.id && previewWrap.style.display !== 'none') syncTrimUI('range');
+    renderMediaList();
+  }
+
+  function renderMediaList() {
+    mediaList.innerHTML = '';
+    if (mediaFiles.length === 0) {
+      mediaList.innerHTML = '<span class="label" style="padding:10px">No videos loaded yet</span>';
+      return;
+    }
+    mediaFiles.forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'media-item' + (m.id === selectedMedia ? ' selected' : '');
+      row.innerHTML = `
+        <img class="thumb" src="${m.thumb || ''}">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.name}</span>
+        <span class="dur">${isFiniteNum(m.duration) ? fmtTime(m.duration) : '…'}</span>`;
+      row.addEventListener('click', () => {
+        selectedMedia = m.id;
+        renderMediaList();
+        setupPreview();
+      });
+      mediaList.appendChild(row);
+    });
+  }
+
+  function getMedia(id) { return mediaFiles.find(m => m.id === id); }
+
+  function curDuration() {
+    const d = getMedia(selectedMedia)?.duration;
+    return isFiniteNum(d) ? d : 0;
+  }
+  function curStart() { const d = curDuration(); return d ? parseFloat(startRange.value) / 1000 * d : 0; }
+  function curEnd() { const d = curDuration(); return d ? parseFloat(endRange.value) / 1000 * d : 0; }
+
+  function setupPreview() {
+    const m = getMedia(selectedMedia);
+    if (!m) return;
+    trimEmpty.style.display = 'none';
+    previewWrap.style.display = 'grid';
+    preview.src = m.url;
+    startRange.max = 1000; endRange.max = 1000;
+    startRange.value = 0; endRange.value = 1000;
+    syncTrimUI('range');
+    renderTimeline();
+  }
+
+  function syncTrimUI(fromNumber) {
+    const m = getMedia(selectedMedia);
+    if (!m) return;
+    const total = curDuration();
+    const rawEnd = () => parseFloat(endRange.value) / 1000 * (total || 1);
+    const rawStart = () => parseFloat(startRange.value) / 1000 * (total || 1);
+    let s = rawStart();
+    let e = rawEnd();
+    if (fromNumber === 'start') {
+      s = clamp(parseFloat(startNum.value) || 0, 0, Math.max(0, e - 0.05));
+      startRange.value = total ? s / total * 1000 : 0;
+    } else if (fromNumber === 'end') {
+      e = clamp(parseFloat(endNum.value) || 0, s + 0.05, total || Number.MAX_SAFE_INTEGER);
+      endRange.value = total ? e / total * 1000 : 1000;
+    }
+    startTimeEl.textContent = fmtTime(s);
+    endTimeEl.textContent = fmtTime(e);
+    clipLenEl.textContent = total ? 'len ' + (e - s).toFixed(3) + 's' : 'loading…';
+    startNum.value = (s || 0).toFixed(3);
+    endNum.value = (e || 0).toFixed(3);
+    btnAddClip.disabled = !total || !(e > s + 0.01);
+  }
+
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  startRange.addEventListener('input', () => {
+    if (parseFloat(startRange.value) >= parseFloat(endRange.value)) startRange.value = parseFloat(endRange.value) - 1;
+    syncTrimUI('range');
+  });
+  endRange.addEventListener('input', () => {
+    if (parseFloat(endRange.value) <= parseFloat(startRange.value)) endRange.value = parseFloat(startRange.value) + 1;
+    syncTrimUI('range');
+  });
+  startNum.addEventListener('input', () => syncTrimUI('start'));
+  endNum.addEventListener('input', () => syncTrimUI('end'));
+
+  btnPlayClip.addEventListener('click', () => {
+    const m = getMedia(selectedMedia);
+    if (!m || !isFiniteNum(curDuration())) return;
+    const s = curStart(), e = curEnd();
+    if (!(e > s)) return;
+    preview.currentTime = s;
+    preview.onplay = () => {
+      const stopAt = () => {
+        if (preview.currentTime >= e) { preview.pause(); preview.onplay = null; return; }
+      };
+      preview.ontimeupdate = stopAt;
+      preview.playbackRate = 1;
+    };
+    preview.play();
+  });
+
+  btnAddClip.addEventListener('click', () => {
+    const m = getMedia(selectedMedia);
+    if (!m) return;
+    const id = 'c' + Date.now() + Math.random().toString(36).slice(2, 7);
+    clips.push({ id, mediaId: m.id, start: curStart(), end: curEnd(), name: m.name });
+    renderTimeline();
+  });
+
+  function renderTimeline() {
+    timelineCount.textContent = clips.length ? `· ${clips.length} clip${clips.length>1?'s':''}` : '';
+    btnClearAll.disabled = clips.length === 0;
+    btnRender.disabled = clips.length === 0;
+    timelineEl.innerHTML = '';
+    if (clips.length === 0) {
+      timelineEl.innerHTML = '<span class="label" style="padding:10px">No clips yet — trim and add some.</span>';
+      return;
+    }
+    clips.forEach(clip => {
+      const m = getMedia(clip.mediaId);
+      const row = document.createElement('div');
+      row.className = 'clip-item' + (clip.id === selectedClip ? ' selected' : '');
+      const len = (clip.end - clip.start).toFixed(2);
+      row.innerHTML = `
+        <span class="handle" title="Drag to reorder">⠿</span>
+        <img class="thumb" src="${m && m.thumb ? m.thumb : ''}">
+        <div class="clip-meta">
+          <span class="name">${clip.name}</span>
+          <span class="dur" style="color:var(--muted);font-size:0.75em">${fmtTime(clip.start)} → ${fmtTime(clip.end)} · ${len}s</span>
+        </div>
+        <div class="clip-actions">
+          <button class="btn-small btn-ghost" data-act="edit">✎ Edit</button>
+          <button class="btn-small btn-ghost" data-act="del">✖</button>
+        </div>`;
+      row.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        selectedClip = clip.id;
+        renderTimeline();
+      });
+      row.querySelector('[data-act="edit"]').addEventListener('click', e => {
+        e.stopPropagation();
+        editClip(clip);
+      });
+      row.querySelector('[data-act="del"]').addEventListener('click', e => {
+        e.stopPropagation();
+        clips = clips.filter(c => c.id !== clip.id);
+        if (selectedClip === clip.id) selectedClip = null;
+        renderTimeline();
+      });
+      addDrag(row, clip.id);
+      timelineEl.appendChild(row);
+    });
+  }
+
+  function editClip(clip) {
+    selectedMedia = clip.mediaId;
+    selectedClip = clip.id;
+    renderMediaList();
+    const m = getMedia(clip.mediaId);
+    if (!m) return;
+    trimEmpty.style.display = 'none';
+    previewWrap.style.display = 'grid';
+    preview.src = m.url;
+    const total = isFiniteNum(m.duration) ? m.duration : 0;
+    if (total) {
+      startRange.value = clip.start / total * 1000;
+      endRange.value = clip.end / total * 1000;
+    } else {
+      startRange.value = 0; endRange.value = 1000;
+    }
+    syncTrimUI('range');
+    btnAddClip.disabled = true;
+    renderTimeline();
+  }
+
+  let dragId = null;
+  function addDrag(row, clipId) {
+    row.draggable = true;
+    row.addEventListener('dragstart', e => {
+      dragId = clipId;
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragover', e => { e.preventDefault(); });
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      if (dragId && dragId !== clipId) {
+        const from = clips.findIndex(c => c.id === dragId);
+        const to = clips.findIndex(c => c.id === clipId);
+        const [moved] = clips.splice(from, 1);
+        clips.splice(to, 0, moved);
+        renderTimeline();
+      }
+      dragId = null;
+    });
+  }
+
+  btnClearAll.addEventListener('click', () => {
+    clips = [];
+    selectedClip = null;
+    renderTimeline();
+  });
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag');
+    [...e.dataTransfer.files].forEach(addMedia);
+  });
+  fileInput.addEventListener('change', () => {
+    [...fileInput.files].forEach(addMedia);
+    fileInput.value = '';
+  });
+
+  function formatType() {
+    const mime = MediaRecorder.isTypeSupported('video/mp4;codecs=h264') ? 'video/mp4' : 'video/webm';
+    return mime;
+  }
+
+  function contentFit(srcW, srcH, dstW, dstH) {
+    const scale = Math.min(dstW / srcW, dstH / srcH);
+    const w = Math.floor(srcW * scale), h = Math.floor(srcH * scale);
+    return { w, h, x: Math.floor((dstW - w) / 2), y: Math.floor((dstH - h) / 2) };
+  }
+
+  function drawVideoSized(v, canvas, ctx) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!v.videoWidth) return;
+    const f = contentFit(v.videoWidth, v.videoHeight, canvas.width, canvas.height);
+    ctx.drawImage(v, f.x, f.y, f.w, f.h);
+  }
+
+  btnRender.addEventListener('click', async () => {
+    if (clips.length === 0) return;
+    const fps = parseInt($('fps').value, 10);
+    const mime = formatType();
+    const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+    const outName = ($('filename').value.trim() || 'merged-video') + '.' + ext;
+
+    progress.style.display = 'block';
+    btnRender.disabled = true;
+    btnCancel.disabled = false;
+    let cancelled = false;
+    cancelReq = () => { cancelled = true; };
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 1280; canvas.height = 720;
+
+    // Determine output size from the first clip's source before recording starts.
+    try {
+      const firstClip = clips[0];
+      const fm = getMedia(firstClip.mediaId);
+      if (fm) {
+        const fv = document.createElement('video');
+        fv.muted = true; fv.playsInline = true;
+        fv.src = fm.url;
+        await new Promise((res) => { fv.onloadedmetadata = res; fv.onerror = res; setTimeout(res, 4000); });
+        if (fv.videoWidth && fv.videoHeight) {
+          canvas.width = Math.min(fv.videoWidth, 1920);
+          canvas.height = Math.min(fv.videoHeight, 1080);
+        }
+        fv.removeAttribute('src'); fv.load();
+      }
+    } catch (e) {}
+
+    const stream = canvas.captureStream(fps);
+    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 9000000 });
+    const allChunks = [];
+    rec.ondataavailable = e => { if (e.data.size > 0) allChunks.push(e.data); };
+    const recDone = new Promise(res => rec.onstop = res);
+
+    const seekTo = v => new Promise(res => {
+      const t = setTimeout(res, 5000);
+      v.onseeked = () => { clearTimeout(t); res(); };
+    });
+
+    try {
+      rec.start(250);
+
+      for (let i = 0; i < clips.length; i++) {
+        if (cancelled) throw new Error('cancelled');
+        updateProgressText(`Clip ${i + 1}/${clips.length}: ${clips[i].name}`);
+        const clip = clips[i];
+        const m = getMedia(clip.mediaId);
+        if (!m) throw new Error('Missing media for clip ' + clip.name);
+
+        const v = document.createElement('video');
+        v.src = m.url;
+        v.muted = true;
+        v.playsInline = true;
+        await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error('Cannot load ' + clip.name)); }).catch(()=>{});
+        await v.play().catch(() => {});
+
+        let start = clip.start, end = clip.end;
+        const dur = isFiniteNum(v.duration) ? v.duration : (isFiniteNum(m.duration) ? m.duration : 0);
+        if (!dur) throw new Error('Could not determine duration for ' + clip.name);
+        if (!isFiniteNum(start)) start = 0;
+        if (!isFiniteNum(end) || end > dur) end = dur;
+        if (start >= end) throw new Error('Invalid range for ' + clip.name);
+
+        v.currentTime = start;
+        await seekTo(v);
+        if (cancelled) throw new Error('cancelled');
+
+        const interval = 1000 / fps;
+        const drawTimer = setInterval(() => {
+          if (cancelled) return;
+          drawVideoSized(v, canvas, ctx);
+        }, interval);
+        await new Promise(res => setTimeout(res, (end - start) * 1000 + 300));
+        clearInterval(drawTimer);
+        if (cancelled) throw new Error('cancelled');
+
+        v.pause(); v.removeAttribute('src'); v.load();
+        updateProgress(i + 1, clips.length);
+      }
+
+      rec.stop();
+      await recDone;
+    } catch (err) {
+      stream.getTracks().forEach(t => t.stop());
+      try { rec.stop(); } catch (e) {}
+      progressText.textContent = (cancelled ? 'Cancelled' : 'Render failed') + (cancelled ? '' : ': ' + err.message);
+      btnRender.disabled = false;
+      btnCancel.disabled = true;
+      cancelReq = null;
+      progressPct.textContent = '';
+      progressFill.style.width = '0%';
+      return;
+    }
+
+    stream.getTracks().forEach(t => t.stop());
+
+    const blob = new Blob(allChunks, { type: mime });
+    if (!blob.size) {
+      progressText.textContent = 'Render produced an empty file.';
+      btnRender.disabled = false;
+      btnCancel.disabled = true;
+      cancelReq = null;
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = outName; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    updateProgressText('Done — saved ' + (blob.size / 1024 / 1024).toFixed(2) + ' MB');
+    progressPct.textContent = '100%';
+    progressFill.style.width = '100%';
+    btnRender.disabled = false;
+    btnCancel.disabled = true;
+    cancelReq = null;
+  });
+
+  function updateProgressText(t) { progressText.textContent = t; }
+  function updateProgress(cur, total) {
+    const pct = Math.round(cur / total * 100);
+    progressPct.textContent = pct + '%';
+    progressFill.style.width = pct + '%';
+  }
+
+  btnCancel.addEventListener('click', () => {
+    if (cancelReq) cancelReq();
+  });
+
+  renderMediaList();
+})();
+</script>
+</body>
+</html>

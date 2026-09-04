@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SerialConsole</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: min(980px, 100%);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--bg);
+    transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: 0.9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--accent); }
+  .btn-stop { background: var(--danger); color: #fff; }
+  .btn-send { background: var(--ok); color: #052e16; }
+  .btn-clear { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-small { padding: 7px 12px; font-size: 0.85rem; }
+  select {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 0.95rem;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { color: var(--muted); font-size: 0.85rem; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    color: var(--muted);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.connected { background: var(--ok); }
+  .dot.error { background: var(--danger); }
+  #statusText { word-break: break-all; }
+  .console-wrap {
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+    height: 320px;
+    display: flex;
+    flex-direction: column;
+  }
+  .console-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #0a1220;
+    border-bottom: 1px solid var(--border);
+  }
+  .console-bar .label { margin: 0; }
+  .console-bar label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+  .console-bar input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+  #echoToggle { cursor: pointer; }
+  #output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #d7e2f0;
+    user-select: text;
+  }
+  .io-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  #sendInput {
+    flex: 1;
+    min-width: 200px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  #sendInput:disabled { opacity: 0.5; }
+  .note { color: var(--muted); font-size: 0.8rem; margin-top: 14px; line-height: 1.5; }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+  <h1>🔌 SerialConsole</h1>
+  <p class="sub">Talk to WebSerial devices — pick a port, set the line discipline, send & receive</p>
+
+  <div class="card">
+    <div class="controls">
+      <button id="btnConnect" class="btn-start">🔗 Connect Serial</button>
+      <button id="btnDisconnect" class="btn-stop" disabled>✖ Disconnect</button>
+    </div>
+
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Disconnected — click Connect Serial</span>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="baud">Baud rate</label>
+        <select id="baud">
+          <option value="300">300</option>
+          <option value="1200">1200</option>
+          <option value="2400">2400</option>
+          <option value="4800">4800</option>
+          <option value="9600" selected>9600</option>
+          <option value="19200">19200</option>
+          <option value="38400">38400</option>
+          <option value="57600">57600</option>
+          <option value="115200">115200</option>
+          <option value="230400">230400</option>
+          <option value="460800">460800</option>
+          <option value="921600">921600</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="dataBits">Word length</label>
+        <select id="dataBits">
+          <option value="5">5 bits</option>
+          <option value="6">6 bits</option>
+          <option value="7">7 bits</option>
+          <option value="8" selected>8 bits</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="stopBits">Stop bits</label>
+        <select id="stopBits">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="parity">Parity</label>
+        <select id="parity">
+          <option value="none" selected>None</option>
+          <option value="even">Even</option>
+          <option value="odd">Odd</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="flowControl">Flow control</label>
+        <select id="flowControl">
+          <option value="none" selected>None</option>
+          <option value="hardware">Hardware (RTS/CTS)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="lineEnd">Line termination</label>
+        <select id="lineEnd">
+          <option value="\n">LF : \n</option>
+          <option value="\r" selected>CR : \r</option>
+          <option value="\r\n">CRLF : \r\n</option>
+          <option value="">None</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="console-wrap">
+      <div class="console-bar">
+        <span class="label">Output</span>
+        <label><input type="checkbox" id="echoToggle" checked> Echo sent</label>
+        <label><input type="checkbox" id="hexToggle"> Hex RX</label>
+      </div>
+      <div id="output">—</div>
+    </div>
+
+    <div class="io-row">
+      <input type="text" id="sendInput" placeholder="Type to send…" disabled autocomplete="off">
+      <button id="btnSend" class="btn-send" disabled>➤ Send</button>
+      <button id="btnClear" class="btn-clear btn-small">Clear</button>
+      <button id="btnSendLine" class="btn-small" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">⏎ Send Line</button>
+    </div>
+
+    <p class="note">
+      Uses the Web Serial API. The port, baud, data bits, stop bits, parity and hardware flow control
+      take effect when you click Connect. <code>Line termination</code> and <code>Send Line</code> append
+      the chosen terminator to your text. RX is shown as text by default (toggle Hex RX to view bytes hex-encoded).
+      Everything stays in your browser — nothing leaves the page.
+    </p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const btnConnect = $('btnConnect');
+  const btnDisconnect = $('btnDisconnect');
+  const btnSend = $('btnSend');
+  const btnSendLine = $('btnSendLine');
+  const btnClear = $('btnClear');
+  const sendInput = $('sendInput');
+  const output = $('output');
+  const dot = $('dot');
+  const statusText = $('statusText');
+  const echoToggle = $('echoToggle');
+  const hexToggle = $('hexToggle');
+
+  let port = null;
+  let reader = null;
+  let connected = false;
+
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    dot.className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  function appendText(text, cls) {
+    if (output.textContent === '—') output.textContent = '';
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = text;
+    output.appendChild(span);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function appendBytes(data) {
+    const bytes = Array.from(new Uint8Array(data));
+    const line = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(' ');
+    appendText(line + '\n', 'rx-hex');
+  }
+
+  function toText(data) {
+    const decoder = new TextDecoder();
+    return decoder.decode(data);
+  }
+
+  function updateControls() {
+    btnConnect.disabled = connected;
+    btnDisconnect.disabled = !connected;
+    btnSend.disabled = !connected;
+    btnSendLine.disabled = !connected;
+    sendInput.disabled = !connected;
+  }
+
+  async function readLoop() {
+    const textDecoder = new TextDecoder();
+    while (port && connected) {
+      try {
+        const { value, done } = await reader.read();
+        if (done) {
+          appendText('\n[EOF]\n', 'meta');
+          break;
+        }
+        if (hexToggle.checked) {
+          appendBytes(value);
+        } else {
+          appendText(textDecoder.decode(value));
+        }
+      } catch (err) {
+        if (connected) {
+          appendText('\n[Read error: ' + err.message + ']\n', 'meta');
+        }
+        break;
+      }
+    }
+  }
+
+  btnConnect.addEventListener('click', async () => {
+    try {
+      if (!navigator.serial) {
+        setStatus('Web Serial API not supported in this browser.', 'error');
+        return;
+      }
+      port = await navigator.serial.requestPort();
+      await port.open({
+        baudRate: parseInt($('baud').value, 10),
+        dataBits: parseInt($('dataBits').value, 10),
+        stopBits: parseInt($('stopBits').value, 10),
+        parity: $('parity').value,
+        flowControl: $('flowControl').value,
+      });
+      connected = true;
+      updateControls();
+      setStatus('Connected: ' + (port.getInfo().usbVendorId ? 'USB 0x' + port.getInfo().usbVendorId.toString(16) + ' / 0x' + port.getInfo().usbProductId.toString(16) : 'serial') + ' @ ' + $('baud').value + ' baud', 'connected');
+      reader = port.readable.getReader();
+      readLoop();
+      if (output.textContent === '—') output.textContent = '';
+      appendText('🔗 Connected\n', 'meta');
+    } catch (err) {
+      if (err.name !== 'NotFoundError') {
+        console.error(err);
+        setStatus('Could not connect: ' + err.message, 'error');
+      }
+    }
+  });
+
+  btnDisconnect.addEventListener('click', async () => {
+    connected = false;
+    try {
+      if (reader) {
+        await reader.cancel();
+        reader.releaseLock();
+        reader = null;
+      }
+      if (port) {
+        await port.close();
+      }
+    } catch (err) {
+      console.warn('close:', err);
+    }
+    const info = port ? port.getInfo() : null;
+    port = null;
+    updateControls();
+    setStatus('Disconnected', '');
+    appendText('🔌 Disconnected\n', 'meta');
+  });
+
+  async function sendText(text) {
+    if (!connected || !port || !text) return;
+    const writer = port.writable.getWriter();
+    try {
+      const encoder = new TextEncoder();
+      await writer.write(encoder.encode(text));
+      if (echoToggle.checked) appendText(text);
+    } catch (err) {
+      appendText('\n[Write error: ' + err.message + ']\n', 'meta');
+    } finally {
+      writer.releaseLock();
+    }
+  }
+
+  function sendLine() {
+    const text = sendInput.value;
+    if (!text) return;
+    sendText(text + ($('lineEnd').value || ''));
+  }
+
+  btnSend.addEventListener('click', sendLine);
+
+  btnSendLine.addEventListener('click', () => {
+    const text = sendInput.value;
+    if (!text) return;
+    const term = $('lineEnd').value;
+    sendText(term || '');
+  });
+
+  sendInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      sendLine();
+    }
+  });
+
+  btnClear.addEventListener('click', () => {
+    output.textContent = '—';
+  });
+
+  updateControls();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InBrowserUtils</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 6px; }
+  .sub { color: var(--muted); margin-bottom: 36px; font-size: 1rem; text-align: center; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    width: min(1080px, 100%);
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color .15s, transform .05s, box-shadow .15s;
+  }
+  .card:hover { border-color: var(--accent); box-shadow: 0 4px 18px rgba(56,189,248,.12); }
+  .card:active { transform: scale(0.99); }
+  .card .icon { font-size: 1.8rem; }
+  .card .title { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+  .card .desc { color: var(--muted); font-size: 0.85rem; line-height: 1.5; flex: 1; }
+  .card .req {
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    align-self: flex-start;
+  }
+  .req secure { color: var(--ok); }
+  .req warn { color: var(--danger); }
+
+  .note {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 40px;
+    text-align: center;
+    line-height: 1.6;
+    max-width: 640px;
+  }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+  <h1>🧰 InBrowserUtils</h1>
+  <p class="sub">A set of utilities that run entirely in your browser — no external services</p>
+
+  <div class="grid">
+    <a class="card" href="ScreenGrab.html">
+      <div class="icon">🎥</div>
+      <div class="title">ScreenGrab</div>
+      <div class="desc">Record your screen and save it as a compressed video file, with format, bitrate and frame-rate control.</div>
+      <span class="req">Runs anywhere</span>
+    </a>
+
+    <a class="card" href="SerialConsole.html">
+      <div class="icon">🔌</div>
+      <div class="title">SerialConsole</div>
+      <div class="desc">Talk to WebSerial devices. Set baud, word length, parity, flow control and line termination; send and receive live.</div>
+      <span class="req">Runs anywhere</span>
+    </a>
+
+    <a class="card" href="BlueScan.html">
+      <div class="icon">📡</div>
+      <div class="title">BlueScan</div>
+      <div class="desc">Enumerate BLE devices and browse the GATT tree — read, write and subscribe to characteristics, like nRF Connect.</div>
+      <span class="req warn">Needs secure context (serve over localhost)</span>
+    </a>
+
+    <a class="card" href="VideoCutMerge.html">
+      <div class="icon">✂️</div>
+      <div class="title">VideoCutMerge</div>
+      <div class="desc">Cut sub-clips from videos, arrange them on a timeline, and render them into a single concatenated output file.</div>
+      <span class="req">Runs anywhere</span>
+    </a>
+  </div>
+
+  <p class="note">
+    Each tool is a single self-contained HTML file with no dependencies and no build step — just open it in a browser.
+    Everything is processed locally; nothing is uploaded anywhere. The Web Bluetooth tool (<code>BlueScan.html</code>)
+    additionally requires a secure context, so serve the folder over localhost for that one:<br>
+    <code>python3 -m http.server 8000</code> → <code>http://localhost:8000/</code>
+  </p>
+</body>
+</html>

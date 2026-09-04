@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScreenGrab</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: min(860px, 100%);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--bg);
+    transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: 0.9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-record { background: var(--danger); color: #fff; }
+  .btn-stop { background: var(--danger); color: #fff; }
+  .btn-start { background: var(--accent); }
+  .btn-save { background: var(--ok); color: #052e16; }
+  select {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 0.95rem;
+  }
+  .label { color: var(--muted); font-size: 0.85rem; margin-bottom: 6px; }
+  .video-wrap {
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    position: relative;
+    margin-bottom: 16px;
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    color: var(--muted);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.rec { background: var(--danger); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { color: var(--muted); font-size: 0.85rem; }
+  input[type="text"] {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 9px 12px;
+    font-size: 0.95rem;
+  }
+  .note { color: var(--muted); font-size: 0.8rem; margin-top: 14px; line-height: 1.5; }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+  <h1>🎥 ScreenGrab</h1>
+  <p class="sub">Record your screen, then save as a compressed file</p>
+
+  <div class="card">
+    <div class="controls">
+      <button id="btnRecord" class="btn-start">▶ Start Recording</button>
+      <button id="btnStop" class="btn-stop" disabled>■ Stop & Save</button>
+    </div>
+
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Idle</span>
+    </div>
+
+    <div class="video-wrap">
+      <video id="preview" autoplay muted playsinline></video>
+      <div class="placeholder" id="placeholder">Recording preview appears here</div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="format">Format / codec</label>
+        <select id="format">
+          <option value="video/webm;codecs=vp9">WebM · VP9 (smallest)</option>
+          <option value="video/webm;codecs=vp8">WebM · VP8</option>
+          <option value="video/webm">WebM · default</option>
+          <option value="video/mp4;codecs=h264">MP4 · H.264</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="bitrate">Bitrate (kbps)</label>
+        <select id="bitrate">
+          <option value="2500000">2.5 Mbps</option>
+          <option value="1500000" selected>1.5 Mbps (recommended)</option>
+          <option value="800000">800 Kbps</option>
+          <option value="400000">400 Kbps</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fps">Frame rate</label>
+        <select id="fps">
+          <option value="60">60 fps</option>
+          <option value="30" selected>30 fps</option>
+          <option value="15">15 fps</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filename">File name</label>
+        <input type="text" id="filename" placeholder="screen-recording" value="screen-recording">
+      </div>
+      <button id="btnSave" class="btn-save" disabled>⬇ Save File</button>
+    </div>
+
+    <p class="note">
+      Recordings happen entirely in your browser — nothing is uploaded anywhere.
+      Compression is handled by the video codec and bitrate you select
+      (VP9 / H.264 shaded output keeps files small). MIME type support varies by browser.
+    </p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const btnRecord = $('btnRecord');
+  const btnStop = $('btnStop');
+  const btnSave = $('btnSave');
+  const preview = $('preview');
+  const placeholder = $('placeholder');
+  const dot = $('dot');
+  const statusText = $('statusText');
+
+  let mediaRecorder;
+  let recordedChunks = [];
+  let isRecording = false;
+
+  function setStatus(text, rec) {
+    statusText.textContent = text;
+    dot.classList.toggle('rec', rec);
+  }
+
+  function setStream(stream) {
+    preview.srcObject = stream;
+    placeholder.style.display = 'none';
+  }
+
+  btnRecord.addEventListener('click', async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: parseInt($('fps').value, 10) } },
+        audio: false,
+      });
+
+      const formatType = $('format').value;
+      const mimeType = MediaRecorder.isTypeSupported(formatType) ? formatType : 'video/webm';
+
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: parseInt($('bitrate').value, 10),
+      });
+
+      recordedChunks = [];
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        setStatus('Recording finished. Ready to save.', false);
+      };
+
+      setStream(stream);
+      mediaRecorder.start(250);
+      isRecording = true;
+      btnRecord.disabled = true;
+      btnStop.disabled = false;
+      btnSave.disabled = true;
+      setStatus('Recording…', true);
+
+      stream.getVideoTracks()[0].addEventListener('ended', () => {
+        if (isRecording) {
+          mediaRecorder.stop();
+          isRecording = false;
+          btnRecord.disabled = false;
+          btnStop.disabled = true;
+          btnSave.disabled = recordedChunks.length === 0 ? true : false;
+        }
+      });
+
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setStatus('Recording cancelled (permission denied).', false);
+      } else {
+        console.error(err);
+        setStatus('Error starting recording.', false);
+      }
+    }
+  });
+
+  btnStop.addEventListener('click', () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      isRecording = false;
+      btnRecord.disabled = false;
+      btnStop.disabled = true;
+      btnSave.disabled = recordedChunks.length === 0;
+    }
+  });
+
+  btnSave.addEventListener('click', () => {
+    if (recordedChunks.length === 0) return;
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    const name = ($('filename').value.trim() || 'screen-recording');
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${name}.${ext}`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    setStatus(`Saved ${(blob.size / 1024 / 1024).toFixed(2)} MB`, false);
+  });
+})();
+</script>
+</body>
+</html>
