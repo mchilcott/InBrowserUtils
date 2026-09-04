@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDFTools</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; padding: 24px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; width: min(1080px, 100%);
+  }
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 20px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop-zone.drag { border-color: var(--accent); background: rgba(56,189,248,.08); color: var(--text); }
+  button {
+    border: none; border-radius: 8px; padding: 9px 14px; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; color: var(--bg); transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: 0.9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--accent); }
+  .btn-ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-ok { background: var(--ok); color: #052e16; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-small { padding: 5px 9px; font-size: 0.78rem; }
+  .panel { background: #0a1220; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .panel h2 { font-size: 0.95rem; padding: 9px 14px; background: #0e1830; border-bottom: 1px solid var(--border); color: var(--muted); display:flex; align-items:center; gap:10px; }
+  .label { color: var(--muted); font-size: 0.8rem; }
+  .file-list { padding: 10px 14px; }
+  .file-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .file-item:last-child { border-bottom: none; }
+  .page-chip {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    min-width: 34px; height: 34px; padding: 0 6px; margin: 3px; border-radius: 6px;
+    background: var(--panel-2); border: 1px solid var(--border); cursor: pointer;
+    font-size: 0.8rem; user-select: none; transition: background .1s;
+  }
+  .page-chip:hover { border-color: var(--accent); }
+  .page-chip.sel { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+  .page-chip:active { transform: scale(.95); }
+  .pages-wrap { padding: 10px 14px; max-height: 260px; overflow-y: auto; }
+  .pages-label { color: var(--muted); font-size: 0.8rem; padding: 4px 0 2px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 14px 4px; }
+  .toolbar input[type="text"] {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); padding: 6px 10px; width: 150px; font-size: 0.8rem;
+  }
+  .render-row { display: flex; gap: 12px; margin-top: 4px; flex-wrap: wrap; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { color: var(--muted); font-size: 0.8rem; }
+  select, input[type="text"] { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin-bottom: 16px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); }
+  .dot.err { background: var(--danger); }
+  .note { color: var(--muted); font-size: 0.8rem; margin-top: 14px; line-height: 1.5; }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+  <h1>📄 PDFTools</h1>
+  <p class="sub">Split, merge, reorder and extract PDF pages — pure JavaScript, nothing leaves the browser</p>
+
+  <div class="card">
+    <div class="drop-zone" id="dropZone">📄 Drop PDF files here, or <b>click to add files</b>
+      <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>📚 Files &amp; Pages</h2>
+      <div class="file-list" id="fileList"><span class="label">No PDFs loaded yet.</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>🎛 Page selection</h2>
+      <div class="toolbar">
+        <button id="btnSelectAll" class="btn-small btn-ghost">Select all</button>
+        <button id="btnSelectNone" class="btn-small btn-ghost">None</button>
+        <button id="btnSelectEven" class="btn-small btn-ghost">Even</button>
+        <button id="btnSelectOdd" class="btn-small btn-ghost">Odd</button>
+        <button id="btnClearFiles" class="btn-small btn-danger">✖ Remove files</button>
+      </div>
+      <div class="pages-wrap" id="pagesWrap"><span class="label">Add a PDF to see its pages.</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>🛠 Export selected pages</h2>
+      <div class="render-row">
+        <div class="field">
+          <label for="mode">Output mode</label>
+          <select id="mode">
+            <option value="one">One file (selected pages in order)</option>
+            <option value="split">One file per page (split)</option>
+            <option value="remove">Remove selected pages (keep rest)</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:180px">
+          <label for="filename">Base file name</label>
+          <input type="text" id="filename" value="output" placeholder="output">
+        </div>
+        <button id="btnExport" class="btn-start" disabled>⬇ Export</button>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Load PDFs to begin.</span>
+    </div>
+
+    <p class="note">
+      Pages are processed structurally (the PDF object model) in pure JavaScript — no external library or service.
+      Selected order becomes the output order, so this covers merging across files, extracting a subset, reordering,
+      splitting, and removal. Files are re-written with a fresh object index; page content (text, images, fonts) is
+      carried over verbatim. Rendering/visual previews are not provided; use the page numbers for selection.
+    </p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const dropZone = $('dropZone');
+  const fileInput = $('fileInput');
+  const fileList = $('fileList');
+  const pagesWrap = $('pagesWrap');
+  const btnExport = $('btnExport');
+  const dot = $('dot');
+  const statusText = $('statusText');
+  const modeSel = $('mode');
+
+  let docs = [];        // { name, bytes, objects: Map<num,{num,gen,start,end,rawDepsRefs}>, pages:[objNum], rootRef, version }
+  let selection = [];   // [{ f:i, page:objNum, label }] in display order
+
+  const WS = new Set(['\0','\t','\n','\f','\r',' ']);
+  const ES = [101,110,100,115,116,114,101,97,109]; // 'endstream'
+
+  function isWS(ch) { return WS.has(ch); }
+  function isDigit(ch) { return ch >= 48 && ch <= 57; }
+
+  // ---- byte helpers ----
+  // Uint8Array has no indexOf in most browsers; provide our own bytes utilities.
+  function bstr(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return s;
+  }
+
+  // search for a byte sequence (given as an Array) starting at `from`; returns index or -1
+  function byteIndexOf(bytes, needle, from) {
+    from = from || 0;
+    const nl = needle.length;
+    outer:
+    for (let i = from; i <= bytes.length - nl; i++) {
+      for (let j = 0; j < nl; j++) if (bytes[i + j] !== needle[j]) continue outer;
+      return i;
+    }
+    return -1;
+  }
+  // search for a single byte value
+  function byteIndexOf1(bytes, val, from) {
+    for (let i = (from || 0); i < bytes.length; i++) if (bytes[i] === val) return i;
+    return -1;
+  }
+
+  function findIndices(bytes, needleArr, from) {
+    const res = []; let idx = byteIndexOf(bytes, needleArr, from);
+    while (idx !== -1) { res.push(idx); idx = byteIndexOf(bytes, needleArr, idx + 1); }
+    return res;
+  }
+
+  // ---- parser over a byte array ----
+  // We do sequential scanning to map indirect objects and stream lengths.
+  function scanObjects(bytes) {
+    const len = bytes.length;
+    const objects = new Map();
+    let i = 0;
+
+    const skipWS = () => { while (i < len && isWS(String.fromCharCode(bytes[i]))) i++; };
+    const skipComment = () => { while (i < len && String.fromCharCode(bytes[i]) !== '\n') i++; };
+    const skipWSAndComments = () => { while (i < len) { if (isWS(String.fromCharCode(bytes[i]))) { i++; } else if (bytes[i] === 37 /*%*/) { skipComment(); } else break; } };
+    const readInt = () => {
+      skipWSAndComments();
+      let neg = false;
+      if (bytes[i] === 45 /*-*/) { neg = true; i++; }
+      let n = 0; let any = false;
+      while (i < len && isDigit(bytes[i])) { n = n * 10 + (bytes[i] - 48); i++; any = true; }
+      if (!any) return null;
+      return neg ? -n : n;
+    };
+    const readWord = () => {
+      skipWSAndComments();
+      let s = '';
+      while (i < len && !isWS(String.fromCharCode(bytes[i])) && bytes[i] !== 60 && bytes[i] !== 62 && bytes[i] !== 91 && bytes[i] !== 93 && bytes[i] !== 40 && bytes[i] !== 41 && bytes[i] !== 47 && bytes[i] !== 123 && bytes[i] !== 125) {
+        s += String.fromCharCode(bytes[i]); i++;
+      }
+      return s;
+    };
+
+    // skip header
+    skipWSAndComments();
+    if (String.fromCharCode(bytes[i], bytes[i+1], bytes[i+2], bytes[i+3]) === '%PDF') {
+      while (i < len && String.fromCharCode(bytes[i]) !== '\n') i++;
+    }
+
+    while (i < len) {
+      skipWSAndComments();
+      if (i >= len) break;
+      // If we hit %EOF we can stop
+      if (bytes[i] === 37) { skipComment(); continue; }
+
+      const save = i;
+      const num = readInt();
+      if (num === null) { i = save + 1; continue; }
+      const gen = readInt();
+      if (gen === null) { i = save + 1; continue; }
+      const kw = readWord();
+      if (kw !== 'obj') { i = save + 1; continue; }
+
+      // Found object start. Record the content start (right after 'obj')
+      const contentStart = i;
+      // Parse one value (dict, array, or scalar) to find a stream / endobj
+      const v = parseValue(bytes, i, len, objects);
+      i = v.end;
+
+      let stream = null;
+      let endobj = -1;
+      // check for stream keyword
+      const save2 = i;
+      skipWSAndComments();
+      if (String.fromCharCode(bytes[i], bytes[i+1], bytes[i+2], bytes[i+3], bytes[i+4], bytes[i+5]) === 'stream') {
+        i += 6;
+        if (String.fromCharCode(bytes[i], bytes[i+1]) === '\r\n') i += 2; else if (String.fromCharCode(bytes[i]) === '\n') i += 1; else if (String.fromCharCode(bytes[i]) === '\r') i += 1;
+        // determine length
+      const streamStart = i;
+      let slen = 0;
+      const L = v && v.type === 'dict' ? v.dict.get('Length') : null;
+      let dataEnd;
+      if (L && typeof L === 'number' && !isNaN(L)) {
+        dataEnd = streamStart + L;
+      } else {
+        // search for endstream
+        const esIdx = byteIndexOf(bytes, ES, streamStart);
+        dataEnd = esIdx === -1 ? len : esIdx;
+      }
+      stream = { start: streamStart, end: dataEnd };
+      i = dataEnd;
+      const eo = byteIndexOf(bytes, ES, i);
+      if (eo !== -1) i = eo + 9;
+      } else {
+        i = save2;
+      }
+
+      // find endobj
+      skipWSAndComments();
+      if (String.fromCharCode(bytes[i], bytes[i+1], bytes[i+2], bytes[i+3], bytes[i+4], bytes[i+5]) === 'endobj') {
+        endobj = i;
+        i += 6;
+      } else {
+        // some files omit endobj; search forward
+        endobj = contentStart;
+      }
+
+      objects.set(num, { num, gen, contentStart, contentEnd: endobj, value: v, stream });
+    }
+
+    return objects;
+  }
+
+  // parseValue returns {type, end, value/dict/array}; i-end style
+  function parseValue(bytes, i, len, objects) {
+    const skipWSAndComments = () => { while (i < len) { const c = String.fromCharCode(bytes[i]); if (isWS(c)) { i++; } else if (bytes[i] === 37) { while (i < len && String.fromCharCode(bytes[i]) !== '\n') i++; } else break; } };
+    skipWSAndComments();
+    const c = bytes[i];
+    if (c === 60 /*<*/) {
+      if (bytes[i+1] === 60) { // dictionary << >>
+        i += 2;
+        const dict = new Map();
+        skipWSAndComments();
+        while (i < len) {
+          skipWSAndComments();
+          if (bytes[i] === 62 && bytes[i+1] === 62) break;
+          const name = readName(bytes, i, len); i = name.end;
+          const val = parseValue(bytes, name.end, len, objects); i = val.end;
+          dict.set(name.name, val);
+        }
+        i += 2;
+        return { type: 'dict', dict, end: i };
+      } else { // hex string <...>
+        i += 1;
+        const eHex = byteIndexOf1(bytes, 62, i);
+        const hexEnd = eHex === -1 ? len : eHex;
+        const s = bstr(bytes.slice(i, hexEnd));
+        i = (eHex === -1 ? len : eHex) + 1;
+        return { type: 'string', end: i };
+      }
+    } else if (c === 91 /*[*/) {
+      i += 1;
+      const arr = [];
+      skipWSAndComments();
+      while (i < len && bytes[i] !== 93) {
+        const v = parseValue(bytes, i, len, objects); i = v.end; arr.push(v);
+        skipWSAndComments();
+      }
+      i += 1;
+      return { type: 'array', arr, end: i };
+    } else if (c === 40 /*(*/) {
+      // literal string (may have escapes/parens)
+      let depth = 1; i += 1;
+      while (i < len && depth > 0) {
+        const ch = bytes[i];
+        if (ch === 92 /*\*/) { i += 2; continue; }
+        if (ch === 40) depth++;
+        else if (ch === 41) depth--;
+        i++;
+      }
+      return { type: 'string', end: i };
+    } else if (c === 47 /*/*/) {
+      return readName(bytes, i, len);
+    } else {
+      // number / reference / boolean / null / keyword
+      const t0 = i;
+      while (i < len && !isWS(String.fromCharCode(bytes[i])) && bytes[i] !== 60 && bytes[i] !== 62 && bytes[i] !== 91 && bytes[i] !== 93 && bytes[i] !== 40 && bytes[i] !== 41 && bytes[i] !== 47) {
+        i++;
+      }
+      let s = bstr(bytes.slice(t0, i));
+      // Reference: "N g R" separated by whitespace
+      if (/^\d+$/.test(s)) {
+        const save = i;
+        let j = i;
+        while (j < len && isWS(String.fromCharCode(bytes[j]))) j++;
+        let g = ''; let gj = j;
+        while (gj < len && isDigit(bytes[gj])) { g += String.fromCharCode(bytes[gj]); gj++; }
+        let j2 = gj;
+        while (j2 < len && isWS(String.fromCharCode(bytes[j2]))) j2++;
+        if (g !== '' && bytes[j2] === 82 /*R*/) {
+          return { type: 'ref', num: parseInt(s, 10), gen: parseInt(g, 10), end: j2 + 1 };
+        }
+        i = save;
+      }
+      if (s === 'true') return { type: 'bool', value: true, end: i };
+      if (s === 'false') return { type: 'bool', value: false, end: i };
+      if (s === 'null') return { type: 'null', end: i };
+      return { type: 'scalar', raw: s, end: i };
+    }
+  }
+
+  function readName(bytes, i, len) {
+    while (i < len) { const c = String.fromCharCode(bytes[i]); if (isWS(c)) i++; else if (bytes[i] === 37) { while (i < len && String.fromCharCode(bytes[i]) !== '\n') i++; } else break; }
+    let n = '';
+    i += 1;
+    while (i < len && !isWS(String.fromCharCode(bytes[i])) && bytes[i] !== 60 && bytes[i] !== 62 && bytes[i] !== 91 && bytes[i] !== 93 && bytes[i] !== 40 && bytes[i] !== 41 && bytes[i] !== 47) {
+      n += String.fromCharCode(bytes[i]); i++;
+    }
+    return { type: 'name', name: n, end: i };
+  }
+
+  // ---- extract ordered page object numbers from a doc ----
+  function extractPages(doc) {
+    const objects = doc.objects;
+    // find trailer /Root by scanning last object for /Root, else brute force
+    const trailerRef = findTrailerRoot(objects);
+    if (!trailerRef) { findPagesFallback(doc); return; }
+
+    // catalog -> /Pages
+    const catalog = objects.get(trailerRef.num);
+    if (!catalog) { findPagesFallback(doc); return; }
+    const rootEntry = dictGet(catalog.value, 'Root') || catalog.value;
+    const pagesRef = entryRef(dictGet(catalog.value, 'Pages')) || entryRef(rootEntry && rootEntry.type==='dict' ? rootEntry.dict : rootEntry);
+    if (!pagesRef) { findPagesFallback(doc); return; }
+
+    const pageOrder = [];
+    const seen = new Set();
+    const stack = [pagesRef.num];
+    while (stack.length) {
+      const o = objects.get(stack.pop());
+      if (!o || seen.has(o.num)) continue;
+      seen.add(o.num);
+      const d = o.value && o.value.type === 'dict' ? o.value.dict : null;
+      if (!d) continue;
+      const type = nameValue(d.get('Type'));
+      const kids = d.get('Kids');
+      if (type === 'Page' || (type === null && kids === null)) {
+        if (type === 'Page') { pageOrder.push(o.num); }
+        else {
+          // likely a page without /Type; treat as page if it has MediaBox/Contents
+          if (d.has('MediaBox') || d.has('Contents')) pageOrder.push(o.num);
+          else if (kids) pushKids(kids);
+        }
+      } else if (kids) {
+        pushKids(kids);
+      } else {
+        // leaf but type missing
+        pageOrder.push(o.num);
+      }
+      function pushKids(kidsVal) {
+        if (kidsVal.type === 'array') {
+          const arr = kidsVal.arr;
+          for (let k = arr.length - 1; k >= 0; k--) {
+            const r = arr[k];
+            if (r && r.type === 'ref' && objects.has(r.num) && !seen.has(r.num)) stack.push(r.num);
+          }
+        }
+      }
+    }
+    doc.pages = pageOrder;
+  }
+
+  function dictGet(objVal, key) {
+    if (!objVal || objVal.type !== 'dict') return null;
+    return objVal.dict.get(key) || null;
+  }
+  function entryRef(e) { return (e && e.type === 'ref') ? e : null; }
+  function nameValue(e) { return (e && e.type === 'name') ? e.name : null; }
+  function refNum(e) { return entryRef(e) ? e.num : null; }
+
+  function findTrailerRoot(objects) {
+    // Search each object's raw content for "/Root N 0 R"
+    for (const o of objects.values()) {
+      const raw = o.contentEnd > o.contentStart;
+      // We'll detect in the trailer object or the catalog object itself.
+    }
+    // Parse the catalog: find object whose dict has /Type /Catalog
+    for (const o of objects.values()) {
+      if (o.value && o.value.type === 'dict' && nameValue(o.value.dict.get('Type')) === 'Catalog') {
+        return { num: o.num, gen: o.gen };
+      }
+    }
+    return null;
+  }
+
+  function findPagesFallback(doc) {
+    const out = [];
+    for (const o of doc.objects.values()) {
+      if (o.value && o.value.type === 'dict' && nameValue(o.value.dict.get('Type')) === 'Page') {
+        out.push(o.num);
+      }
+    }
+    doc.pages = out;
+  }
+
+  // ---- collect referenced object numbers from an object's raw region ----
+  function collectRefs(doc, objNum) {
+    const o = doc.objects.get(objNum);
+    if (!o) return [];
+    const refs = [];
+    const bytes = doc.bytes;
+    const i0 = o.contentStart;
+    const i1 = o.stream ? o.stream.start : o.contentEnd;
+    const len = bytes.length;
+
+    function walk(i, end) {
+      while (i < end) {
+        while (i < end) { const c = String.fromCharCode(bytes[i]); if (isWS(c)) i++; else if (bytes[i]===37) { while (i<end && String.fromCharCode(bytes[i])!=='\n') i++; } else break; }
+        if (i >= end) return i;
+        const c = bytes[i];
+        if (c === 60) {
+          if (bytes[i+1] === 60) { i = walk(i + 2, end); }       // dict << >>
+          else { const e = byteIndexOf1(bytes, 62, i); i = e===-1 ? end : e + 1; } // hex string
+        } else if (c === 91) { i = walk(i + 1, end); }            // array
+        else if (c === 40) { let d=1; i+=1; while (i<end && d>0) { const ch=bytes[i]; if (ch===92){i+=2;continue;} if (ch===40)d++; else if (ch===41)d--; i++; } }
+        else if (c === 47) { while (i < end && !isWS(String.fromCharCode(bytes[i])) && bytes[i]!==60 && bytes[i]!==62 && bytes[i]!==91 && bytes[i]!==93 && bytes[i]!==40 && bytes[i]!==41) i++; }
+        else if (isDigit(c) || c === 43 || c === 45 || c === 46) {
+          const t0 = i;
+          while (i < end && !isWS(String.fromCharCode(bytes[i])) && bytes[i]!==60 && bytes[i]!==62 && bytes[i]!==91 && bytes[i]!==93 && bytes[i]!==40 && bytes[i]!==41) i++;
+          const tok = bstr(bytes.slice(t0, i));
+          let j = i; while (j < end && isWS(String.fromCharCode(bytes[j]))) j++;
+          let num2=''; let tj=j; while (tj < end && isDigit(bytes[tj])) { num2 += String.fromCharCode(bytes[tj]); tj++; }
+          let j2=tj; while (j2 < end && isWS(String.fromCharCode(bytes[j2]))) j2++;
+          if (num2 && bytes[j2] === 82) {
+            const n = parseInt(tok, 10);
+            if (n > 0 && doc.objects.has(n)) refs.push(n);
+            i = j2 + 1;
+          } else { i = t0 + Math.max(1, i - t0); }
+        } else {
+          i += 1;
+          while (i < end && !isWS(String.fromCharCode(bytes[i])) && bytes[i]!==60 && bytes[i]!==62 && bytes[i]!==91 && bytes[i]!==93 && bytes[i]!==40 && bytes[i]!==41) i++;
+        }
+      }
+      return i;
+    }
+
+    walk(i0, i1);
+    return refs;
+  }
+
+  // ---- build output PDF for a list of (docIdx, pageNum) ----
+  function buildPdf(docList, pageRefs /* [{f, num}] */) {
+    const include = new Map(); // key `${f}:${num}` -> {f,num}
+
+    // 1) catalog & pages tree for each contributing file's selected pages
+    // We'll create one new Pages node referencing all selected pages.
+
+    // Determine the new root (catalog). Use first doc's catalog.
+    const baseDoc = docList[0];
+    const baseCatalog = findTrailerRoot(baseDoc.objects);
+    if (!baseCatalog) throw new Error('No catalog found');
+
+    // 2) include each selected page and its transitive closure
+    const stack = [];
+    for (const pr of pageRefs) stack.push(pr);
+    // track raw refs per included object
+    while (stack.length) {
+      const { f, num } = stack.pop();
+      const key = f + ':' + num;
+      if (include.has(key)) continue;
+      include.set(key, { f, num });
+      const doc = docList[f];
+      const refs = collectRefs(doc, num);
+      for (const r of refs) stack.push({ f, num: r });
+    }
+
+    // 3) include catalog-adjacent objects (AcroForm etc.) from base doc
+    const baseCatalogObj = baseDoc.objects.get(baseCatalog.num);
+    const catRefs = collectRefs(baseDoc, baseCatalog.num);
+    for (const r of catRefs) stack.push({ f: 0, num: r });
+    while (stack.length) {
+      const { f, num } = stack.pop();
+      const key = f + ':' + num; if (include.has(key)) continue;
+      include.set(key, { f, num });
+      const refs = collectRefs(docList[f], num);
+      for (const r of refs) stack.push({ f, num: r });
+    }
+
+    // remove catalog pages node from inclusion (we rebuild it) — catalog refs include /Pages old node; we'll drop it
+    const oldPagesRef = (baseCatalogObj && baseCatalogObj.value && baseCatalogObj.value.type==='dict') ? refNum(baseCatalogObj.value.dict.get('Pages')) : null;
+    if (oldPagesRef) include.delete('0:' + oldPagesRef);
+
+    // 4) assign new numbers
+    // keep catalog as object 1
+    const numMap = new Map(); // key -> newNum
+    const items = []; // {f,num, isCatalog, isPages}
+    const catKey = '0:' + baseCatalog.num;
+    numMap.set(catKey, 1); items.push({ f: 0, num: baseCatalog.num, isCatalog: true });
+    // pages node as 2
+    numMap.set('__pages__', 2); items.push({ special: 'pages' });
+    let next = 3;
+    for (const [key, val] of include) {
+      if (key === catKey || key === '__pages__') continue;
+      numMap.set(key, next++); items.push({ f: val.f, num: val.num });
+    }
+    if (oldPagesRef) numMap.set('0:' + oldPagesRef, 2); // remap refs to old pages node -> our new node 2 (already removed from include/items)
+
+    // 5) assemble raw objects with rewritten references into a growing byte buffer
+    const buf = new ByteBuilder();
+    buf.push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+
+    const objOffsets = new Array(numMap.size + 1).fill(-1); // 1-indexed by new object number
+
+    const writeObject = (num, contentRaw) => {
+      objOffsets[num] = buf.length();
+      buf.push(`${num} 0 obj\n${contentRaw}\nendobj\n`);
+    };
+
+    // Pages node object (num 2)
+    {
+      const kids = pageRefs.map(pr => `${numMap.get(pr.f + ':' + pr.num)} 0 R`);
+      const pagesRaw = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pageRefs.length} >>`;
+      writeObject(2, pagesRaw);
+    }
+
+    // catalog object (num 1) — replace /Pages with our new node, rewrite refs
+    {
+      let raw = getObjectRaw(docList[0], baseCatalog.num);
+      if (oldPagesRef) {
+        const re = new RegExp('\\b' + oldPagesRef + '\\s+0\\s+R\\b', 'g');
+        raw = raw.replace(re, '2 0 R');
+      }
+      raw = rewriteRefs(raw, nNum => {
+        const key = '0:' + nNum;
+        return key === catKey ? 1 : (numMap.has(key) ? numMap.get(key) : null);
+      });
+      writeObject(1, raw);
+    }
+
+    // all other objects
+    for (const item of items) {
+      if (item.special === 'pages' || item.isCatalog) continue;
+      const newNum = numMap.get(item.f + ':' + item.num);
+      let raw = getObjectRaw(docList[item.f], item.num);
+      let replaced = rewriteRefs(raw, refKey => {
+        const rk = item.f + ':' + refKey;
+        return numMap.has(rk) ? numMap.get(rk) : null;
+      });
+      writeObject(newNum, replaced);
+    }
+
+    // xref
+    const xrefOffset = buf.length();
+    let xref = 'xref\n0 ' + objOffsets.length + '\n0000000000 65535 f \n';
+    for (let i = 1; i < objOffsets.length; i++) {
+      xref += String(objOffsets[i]).padStart(10, '0') + ' 00000 n \n';
+    }
+    xref += 'trailer\n<< /Size ' + objOffsets.length + ' /Root 1 0 R >>\nstartxref\n' + xrefOffset + '\n%%EOF\n';
+    buf.push(xref);
+
+    return buf.toBytes();
+  }
+
+  // lightweight byte accumulator that also tracks byte length
+  class ByteBuilder {
+    constructor() { this.chunks = []; this.len = 0; }
+    push(s) { this.chunks.push(s); this.len += s.length; }
+    length() { return this.len; }
+    toBytes() {
+      const total = this.chunks.join('');
+      const out = new Uint8Array(total.length);
+      for (let k = 0; k < total.length; k++) out[k] = total.charCodeAt(k) & 0xff;
+      return out;
+    }
+  }
+
+  function getObjectRaw(doc, num) {
+    const o = doc.objects.get(num);
+    if (!o) return 'null';
+    const bytes = doc.bytes;
+    let raw = bstr(bytes.slice(o.contentStart, o.stream ? o.stream.start : o.contentEnd));
+    if (o.stream) {
+      // include stream data
+      const data = bstr(bytes.slice(o.stream.start, o.stream.end));
+      // raw (contentStart..stream.start) ends with the "stream\n" keyword; drop it before rebuilding
+      raw = raw.replace(/\s*stream\s*$/, '');
+      // recompute /Length to the real data length (handles "6 0 R" refs and bare numbers)
+      raw = raw.replace(/(\/Length\s+)\d+(\s+0\s+R)?/g, '$1' + data.length);
+      raw += 'stream\n' + data + 'endstream';
+    }
+    return raw;
+  }
+
+  function rewriteRefs(raw, resolver) {
+    // find all "N 0 R" with N>0 and replace via resolver; resolver returns newNum or null (keep)
+    const re = /(\d+)\s+0\s+R/g;
+    return raw.replace(re, (m, n) => {
+      const nNum = parseInt(n, 10);
+      if (nNum <= 0) return m;
+      const newN = resolver(nNum);
+      return newN != null ? `${newN} 0 R` : m;
+    });
+  }
+
+  // ---- load a file ----
+  async function addFile(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    // trim trailing garbage, find %PDF
+    const head = byteIndexOf(bytes, [37,80,68,70]); // %PDF
+    if (head === -1) throw new Error('Not a PDF: ' + file.name);
+    const objects = scanObjects(bytes);
+    if (objects.size === 0) throw new Error('No objects parsed: ' + file.name);
+    const doc = { name: file.name, bytes, objects, pages: [] };
+    extractPages(doc);
+    if (doc.pages.length === 0) throw new Error('No pages found in ' + file.name);
+    docs.push(doc);
+    renderFiles();
+  }
+
+  function labelFor(doc, objNum) {
+    const idx = doc.pages.indexOf(objNum);
+    return `${doc.name.replace(/\.pdf$/i, '')} · p${idx + 1}`;
+  }
+
+  // ---- selection ----
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    dot.className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  function allPageRefs() {
+    const refs = [];
+    docs.forEach((d, fi) => d.pages.forEach(num => refs.push({ f: fi, num })));
+    return refs;
+  }
+
+  function keyOf(pr) { return pr.f + ':' + pr.num; }
+
+  function renderFiles() {
+    fileList.innerHTML = '';
+    if (docs.length === 0) {
+      fileList.innerHTML = '<span class="label">No PDFs loaded yet.</span>';
+    }
+    docs.forEach((d, fi) => {
+      const row = document.createElement('div');
+      row.className = 'file-item';
+      row.innerHTML = `<span>📄 ${d.name}</span><span class="label">${d.pages.length} page${d.pages.length>1?'s':''}</span>`;
+      fileList.appendChild(row);
+    });
+    renderPages();
+    btnExport.disabled = selection.length === 0;
+  }
+
+  function renderPages() {
+    pagesWrap.innerHTML = '';
+    if (docs.length === 0) { pagesWrap.innerHTML = '<span class="label">Add a PDF to see its pages.</span>'; btnExport.disabled = true; return; }
+    const selSet = new Set(selection.map(keyOf));
+    docs.forEach((d, fi) => {
+      const lab = document.createElement('div');
+      lab.className = 'pages-label';
+      lab.textContent = d.name;
+      pagesWrap.appendChild(lab);
+      d.pages.forEach((num, pidx) => {
+        const chip = document.createElement('span');
+        chip.className = 'page-chip' + (selSet.has(fi + ':' + num) ? ' sel' : '');
+        chip.textContent = String(pidx + 1);
+        chip.title = `${d.name} — page ${pidx + 1}`;
+        chip.addEventListener('click', () => toggle(fi, num));
+        pagesWrap.appendChild(chip);
+      });
+    });
+    btnExport.disabled = selection.length === 0;
+  }
+
+  function toggle(fi, num) {
+    const k = fi + ':' + num;
+    const idx = selection.findIndex(s => s.f === fi && s.num === num);
+    if (idx === -1) selection.push({ f: fi, num }); else selection.splice(idx, 1);
+    renderPages();
+    setStatus(`${selection.length} page${selection.length===1?'':'s'} selected`, selection.length ? 'ok' : '');
+  }
+
+  function setAll(pred) {
+    selection = [];
+    docs.forEach((d, fi) => d.pages.forEach(num => { if (pred(fi, d.pages.indexOf(num))) selection.push({ f: fi, num }); }));
+    renderPages();
+  }
+
+  $('btnSelectAll').addEventListener('click', () => setAll(() => true));
+  $('btnSelectNone').addEventListener('click', () => { selection = []; renderPages(); });
+  $('btnSelectEven').addEventListener('click', () => setAll((fi, pidx) => (pidx + 1) % 2 === 0));
+  $('btnSelectOdd').addEventListener('click', () => setAll((fi, pidx) => (pidx + 1) % 2 === 1));
+
+  $('btnClearFiles').addEventListener('click', () => {
+    docs = []; selection = [];
+    renderFiles(); setStatus('Cleared.', '');
+  });
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); [...e.dataTransfer.files].forEach(loadOne); });
+  fileInput.addEventListener('change', () => { [...fileInput.files].forEach(loadOne); fileInput.value = ''; });
+
+  async function loadOne(file) {
+    try {
+      await addFile(file);
+      setStatus(`Loaded ${file.name}`, 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Failed: ' + err.message, 'err');
+    }
+  }
+
+  btnExport.addEventListener('click', async () => {
+    if (selection.length === 0) return;
+    const mode = modeSel.value;
+    const base = ($('filename').value.trim() || 'output').replace(/\.pdf$/i, '');
+
+    try {
+      if (mode === 'split') {
+        // one file per selected page
+        setStatus(`Exporting ${selection.length} file(s)…`, 'ok');
+        for (let i = 0; i < selection.length; i++) {
+          const out = buildPdf(docs, [selection[i]]);
+          downloadBlob(new Blob([out], { type: 'application/pdf' }), `${base}_page${i + 1}.pdf`);
+        }
+      } else if (mode === 'remove') {
+        // keep = all pages not selected (across all files)
+        const removeSet = new Set(selection.map(keyOf));
+        const keep = allPageRefs().filter(pr => !removeSet.has(keyOf(pr)));
+        if (keep.length === 0) { setStatus('Nothing left after removal.', 'err'); return; }
+        const out = buildPdf(docs, keep);
+        downloadBlob(new Blob([out], { type: 'application/pdf' }), base + '_kept.pdf');
+      } else {
+        const out = buildPdf(docs, selection);
+        downloadBlob(new Blob([out], { type: 'application/pdf' }), base + '.pdf');
+      }
+      setStatus('Done.', 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Export failed: ' + err.message, 'err');
+    }
+  });
+
+  function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+})();
+</script>
+</body>
+</html>

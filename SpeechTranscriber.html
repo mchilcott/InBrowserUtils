@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpeechTranscriber</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: min(860px, 100%);
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  button {
+    border: none; border-radius: 8px; padding: 10px 16px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer; color: var(--bg);
+    transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: 0.9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--accent); }
+  .btn-stop { background: var(--danger); color: #fff; }
+  .btn-save { background: var(--ok); color: #052e16; }
+  .btn-ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 12px; font-size: 0.95rem;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { color: var(--muted); font-size: 0.85rem; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin-bottom: 16px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.rec { background: var(--danger); animation: blink 1s infinite; }
+  .dot.ok { background: var(--ok); }
+  @keyframes blink { 50% { opacity: 0.2; } }
+  .transcript-wrap {
+    background: #0a1220; border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; margin-bottom: 16px;
+  }
+  .transcript-bar {
+    display: flex; gap: 12px; align-items: center; padding: 8px 12px;
+    background: #0e1830; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+  }
+  .transcript-bar label { color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .transcript-bar input[type="checkbox"] { accent-color: var(--accent); }
+  #transcript {
+    height: 320px; overflow-y: auto; padding: 12px;
+    font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; color: #d7e2f0;
+    user-select: text; cursor: text; outline: none;
+  }
+  #transcript:empty::before { content: "Transcript will appear here — click Start Listening."; color: var(--muted); font-style: italic; }
+  .interim { color: var(--accent); opacity: .7; }
+  .note { color: var(--muted); font-size: 0.8rem; margin-top: 14px; line-height: 1.5; }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+</head>
+<body>
+  <h1>🎙️ SpeechTranscriber</h1>
+  <p class="sub">Live speech-to-text using your browser's built-in speech recognition</p>
+
+  <div class="card">
+    <div class="controls">
+      <button id="btnStart" class="btn-start">🎙 Start Listening</button>
+      <button id="btnStop" class="btn-stop" disabled>■ Stop</button>
+      <button id="btnClear" class="btn-ghost">Clear</button>
+      <button id="btnSave" class="btn-save">⬇ Save .txt</button>
+    </div>
+
+    <div class="row" style="margin-bottom:16px">
+      <div class="field">
+        <label for="lang">Language</label>
+        <select id="lang">
+          <option value="en-US" selected>English (US)</option>
+          <option value="en-GB">English (UK)</option>
+          <option value="en-AU">English (AU)</option>
+          <option value="en">English (auto)</option>
+          <option value="fr-FR">Français</option>
+          <option value="de-DE">Deutsch</option>
+          <option value="es-ES">Español</option>
+          <option value="it-IT">Italiano</option>
+          <option value="pt-BR">Português (BR)</option>
+          <option value="nl-NL">Nederlands</option>
+          <option value="pl-PL">Polski</option>
+          <option value="sv-SE">Svenska</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="intmode">Mode</label>
+        <select id="intmode">
+          <option value="interim" selected>Interim results (live)</option>
+          <option value="final">Final results only</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="status">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">Idle — requires Chrome/Edge, or macOS Safari</span>
+    </div>
+
+    <div class="transcript-wrap">
+      <div class="transcript-bar">
+        <span class="label">Transcript</span>
+        <label><input type="checkbox" id="autoScroll" checked> Auto-scroll</label>
+      </div>
+      <div id="transcript" contenteditable></div>
+    </div>
+
+    <p class="note">
+      Uses the Web Speech API (<code>SpeechRecognition</code>), which is built into the browser — no external service.
+      Recognition is sent to your browser vendor's speech service (Chrome/Edge online, or Apple's on-device engine on
+      macOS Safari). Language and mode can be chosen; interim mode shows live text in blue. The transcript is editable in
+      place and can be saved as a text file.
+    </p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const btnStart = $('btnStart');
+  const btnStop = $('btnStop');
+  const btnClear = $('btnClear');
+  const btnSave = $('btnSave');
+  const transcript = $('transcript');
+  const dot = $('dot');
+  const statusText = $('statusText');
+  const autoScroll = $('autoScroll');
+  const intmode = $('intmode');
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    btnStart.disabled = true;
+    statusText.textContent = 'Speech recognition not supported in this browser.';
+    dot.className = 'dot';
+  }
+
+  let rec = null;
+  let running = false;
+  let interimSpace = false;
+  let reconnectTimeout = null;
+
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    dot.className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  function scrollBottom() {
+    if (autoScroll.checked) transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  function text() { return transcript.textContent; }
+  function setText(t) { transcript.textContent = t; }
+
+  function createRecognizer() {
+    const r = new SR();
+    r.lang = $('lang').value;
+    r.continuous = true;
+    r.interimResults = intmode.value === 'interim';
+    r.maxAlternatives = 1;
+    return r;
+  }
+
+  function appendFinal(text) {
+    const clearInterim = transcript.querySelector('.interim');
+    if (clearInterim) clearInterim.remove();
+    if (text().trim() !== '') {
+      if (transcript.textContent.trim() !== '' && !/\n$/.test(transcript.textContent)) {
+        transcript.textContent += ' ';
+      }
+      transcript.textContent += text;
+    }
+    scrollBottom();
+  }
+
+  function showInterim(text) {
+    const clearInterim = transcript.querySelector('.interim');
+    if (clearInterim) clearInterim.remove();
+    const span = document.createElement('span');
+    span.className = 'interim';
+    span.textContent = text;
+    transcript.appendChild(span);
+    scrollBottom();
+  }
+
+  function startRecognition() {
+    if (running) return;
+    if (!SR) return;
+    rec = createRecognizer();
+
+    rec.onstart = () => {
+      running = true;
+      btnStart.disabled = true;
+      btnStop.disabled = false;
+      setStatus('Listening…', 'rec');
+    };
+
+    rec.onresult = e => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) {
+          appendFinal(res[0].transcript);
+        } else if (intmode.value === 'interim') {
+          interim += res[0].transcript;
+        }
+      }
+      if (interim && intmode.value === 'interim') showInterim(interim);
+    };
+
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setStatus('Microphone permission denied.', '');
+        stopRecognition();
+      } else if (e.error === 'no-speech') {
+        setStatus('No speech detected — still listening…', 'rec');
+      } else if (e.error === 'network') {
+        setStatus('Network error — speech service unavailable.', '');
+        stopRecognition();
+      }
+    };
+
+    rec.onend = () => {
+      // SpeechRecognition auto-stops on silence/error; keep recording by restarting.
+      if (running) {
+        reconnectTimeout = setTimeout(() => { if (running) { rec.start(); } }, 200);
+      }
+    };
+
+    try { rec.start(); } catch (e) { rec = null; }
+  }
+
+  function stopRecognition() {
+    running = false;
+    if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null; }
+    if (rec) { try { rec.abort(); } catch (e) {} rec = null; }
+    btnStart.disabled = false;
+    btnStop.disabled = true;
+    setStatus('Stopped', 'ok');
+  }
+
+  btnStart.addEventListener('click', startRecognition);
+  btnStop.addEventListener('click', stopRecognition);
+
+  btnClear.addEventListener('click', () => { setText(''); });
+
+  btnSave.addEventListener('click', () => {
+    const name = prompt('File name', 'transcript');
+    if (!name) return;
+    const blob = new Blob([text()], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name.replace(/[^a-z0-9-_]+/gi, '_') + '.txt'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  document.getElementById('lang').addEventListener('change', () => {
+    if (running) { stopRecognition(); startRecognition(); }
+  });
+})();
+</script>
+</body>
+</html>

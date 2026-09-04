@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDIDebug</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-2: #273449;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --danger: #f87171;
+    --ok: #4ade80;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 24px; font-size: 0.9rem; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    width: min(980px, 100%);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--bg);
+    transition: opacity .15s, transform .05s;
+  }
+  button:hover { opacity: 0.9; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-start { background: var(--accent); }
+  .btn-send { background: var(--ok); color: #052e16; }
+  .btn-clear { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-small { padding: 7px 12px; font-size: 0.85rem; }
+  select, input[type="number"], input[type="text"] {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 0.95rem;
+    width: 140px;
+  }
+  input[type="number"] { width: 82px; }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+    color: var(--muted);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.connected { background: var(--ok); }
+  .dot.error { background: var(--danger); }
+  .section {
+    margin-bottom: 20px;
+  }
+  .section h2 {
+    font-size: 1rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { color: var(--muted); font-size: 0.85rem; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .console-wrap {
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    height: 280px;
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+  }
+  .console-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #0a1220;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .console-bar .spacer { flex: 1; }
+  .console-bar .lbl { color: var(--muted); }
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #d7e2f0;
+    user-select: text;
+  }
+  .ev { color: #67e8f9; }
+  .note-on { color: var(--ok); }
+  .note-off { color: #f87171; }
+  .cc { color: #fbbf24; }
+  .meta { color: var(--muted); }
+  .live {
+    display: inline-block;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+    vertical-align: middle;
+  }
+  .live.on { background: var(--ok); }
+  .note {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 18px;
+    line-height: 1.6;
+  }
+  code { background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+  .kv { display: inline-grid; grid-template-columns: auto auto; gap: 2px 10px; margin-right: 20px; }
+  .kv b { color: var(--text); }
+  .sum {
+    font-size: 0.95rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--muted);
+  }
+  .sum b { color: var(--text); }
+</style>
+</head>
+<body>
+  <h1>🎹 MIDIDebug</h1>
+  <p class="sub">Inspect incoming MIDI and inject test messages — all in your browser</p>
+
+  <div class="card">
+    <div class="controls">
+      <button id="btnRequest" class="btn-start">Request MIDI Access</button>
+      <span class="status">
+        <span id="dot" class="dot"></span>
+        <span id="statusText">Click above to connect to MIDI devices.</span>
+      </span>
+    </div>
+
+    <div class="row">
+      <span class="live" id="inLive"></span>
+      <b id="inStat">No input monitored</b>
+      <span class="live" id="outLive"></span>
+      <b id="outStat">No output selected</b>
+    </div>
+
+    <div class="section">
+      <h2>Input monitor</h2>
+      <div class="row">
+        <div class="field">
+          <label>MIDI input</label>
+          <select id="inputSelect"></select>
+        </div>
+        <button id="btnClear" class="btn-clear btn-small">Clear log</button>
+        <button id="btnPause" class="btn-small" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">Pause</button>
+      </div>
+      <div class="sum" id="summary"></div>
+      <div class="console-wrap">
+        <div class="console-bar">
+          <span class="lbl">MIDI message log</span>
+          <span class="spacer"></span>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="rawToggle" style="accent-color:var(--accent)"> Raw bytes</label>
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="autoScroll" style="accent-color:var(--accent)" checked> Auto-scroll</label>
+        </div>
+        <div id="log">—</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Output injection (test)</h2>
+      <div class="row">
+        <div class="field">
+          <label>MIDI output</label>
+          <select id="outputSelect"></select>
+        </div>
+        <div class="field">
+          <label>Channel (1-16)</label>
+          <input type="number" id="chan" min="1" max="16" value="1">
+        </div>
+        <div class="field">
+          <label>Note</label>
+          <select id="noteSel"></select>
+        </div>
+        <div class="field">
+          <label>Velocity</label>
+          <input type="number" id="vel" min="0" max="127" value="100">
+        </div>
+        <button id="btnNoteOn" class="btn-send">Note On</button>
+        <button id="btnNoteOff" class="btn-clear btn-small">Note Off</button>
+        <button id="btnAllNotesOff" class="btn-clear btn-small">All Notes Off</button>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <div class="field">
+          <label>CC number (0-127)</label>
+          <input type="number" id="ccNum" min="0" max="127" value="1">
+        </div>
+        <div class="field">
+          <label>CC value</label>
+          <input type="number" id="ccVal" min="0" max="127" value="64">
+        </div>
+        <button id="btnCC" class="btn-send">Send CC</button>
+        <div class="field">
+          <label>Pitch bend (-8192..8191)</label>
+          <input type="number" id="pb" min="-8192" max="8191" value="0">
+        </div>
+        <button id="btnPB" class="btn-send">Pitch Bend</button>
+        <div class="field">
+          <label>Program (0-127)</label>
+          <input type="number" id="prog" min="0" max="127" value="0">
+        </div>
+        <button id="btnProg" class="btn-send">Program Chg</button>
+      </div>
+    </div>
+
+    <p class="note">
+      Uses the Web MIDI API (Chromium, Edge etc.). 
+      <strong>Input monitor</strong> decodes note on/off, control change, program change, pitch bend,
+      channel pressure and common system messages into readable lines, with a per-channel note counter.
+      <strong>Output injection</strong> lets you send test messages to a selected output to verify routing.
+      Select an input/output to monitor or inject (device listing auto-updates on plug/unplug).
+      Everything is processed locally — nothing leaves the page.
+    </p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const inputSelect = $('inputSelect');
+  const outputSelect = $('outputSelect');
+  const log = $('log');
+  const dot = $('dot');
+  const statusText = $('statusText');
+  const inLive = $('inLive');
+  const outLive = $('outLive');
+  const inStat = $('inStat');
+  const outStat = $('outStat');
+  const summary = $('summary');
+  const autoScroll = $('autoScroll');
+  const rawToggle = $('rawToggle');
+  const btnPause = $('btnPause');
+  const noteSel = $('noteSel');
+
+  let midi = null;
+  let paused = false;
+  let currentInPort = null;
+  const activeNotes = new Map(); // channel -> note -> count
+
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  function noteName(n) { return NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 1); }
+  function fmtNum(v) { return (v & 0xff); }
+
+  // populate note selector 0-127
+  for (let n = 0; n < 128; n++) {
+    const opt = document.createElement('option');
+    opt.value = n;
+    opt.textContent = n + ' ' + noteName(n);
+    noteSel.appendChild(opt);
+  }
+  noteSel.value = 60;
+
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    dot.className = 'dot' + (cls ? ' ' + cls : '');
+  }
+
+  function logLine(text, cls) {
+    if (log.textContent === '—') log.textContent = '';
+    const d = new Date();
+    const ts = d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+    const span = document.createElement('span');
+    span.textContent = '[' + ts + '] ' + text + '\n';
+    if (cls) span.className = cls;
+    log.appendChild(span);
+    if (autoScroll.checked) log.scrollTop = log.scrollHeight;
+  }
+
+  function fillSelect(sel, map) {
+    sel.innerHTML = '';
+    for (const port of map.values()) {
+      const opt = document.createElement('option');
+      opt.value = port.id;
+      opt.textContent = port.name + (port.manufacturer ? ' · ' + port.manufacturer : '');
+      sel.appendChild(opt);
+    }
+  }
+  function refreshInput() { fillSelect(inputSelect, midi ? midi.inputs : new Map()); }
+  function refreshOutput() { fillSelect(outputSelect, midi ? midi.outputs : new Map()); }
+
+  function monitorInput(id) {
+    if (!midi) return;
+    if (currentInPort) currentInPort.onmidimessage = null;
+    currentInPort = null;
+    if (!id) { inStat.textContent = 'No input monitored'; return; }
+    const port = midi.inputs.get(id);
+    if (!port) { inStat.textContent = 'No input monitored'; return; }
+    currentInPort = port;
+    port.onmidimessage = e => { if (!paused) decode(e.data, rawToggle.checked); };
+    inStat.textContent = 'Listening to ' + (port.name || 'unnamed');
+  }
+
+  function renderSummary() {
+    let total = 0;
+    const parts = [];
+    const chans = new Map();
+    for (const [ch, map] of activeNotes) {
+      let chTotal = 0;
+      for (const cnt of map.values()) chTotal += cnt;
+      chans.set(ch, chTotal);
+      total += chTotal;
+    }
+    const sorted = [...chans.entries()].sort((a, b) => a[0] - b[0]);
+    parts.push('<span>Active notes (all ch): <b>' + total + '</b></span>');
+    for (const [ch, c] of sorted) parts.push('<span>ch' + (ch + 1) + ': <b>' + c + '</b></span>');
+    summary.innerHTML = parts.join('');
+  }
+
+  function trackNote(ch, note, delta) {
+    if (!activeNotes.has(ch)) activeNotes.set(ch, new Map());
+    const map = activeNotes.get(ch);
+    const cur = map.get(note) || 0;
+    const next = cur + delta;
+    if (next <= 0) map.delete(note); else map.set(note, next);
+    if (map.size === 0) activeNotes.delete(ch);
+    renderSummary();
+  }
+
+  function decode(data, raw) {
+    if (data.length === 0) return;
+    const status = data[0] & 0xf0;
+    const chan = (data[0] & 0x0f) + 1;
+    const hex = '[' + Array.from(data, b => b.toString(16).padStart(2, '0')).join(' ') + ']';
+
+    // handling of running status would need prevStatus tracking; messages come complete here for common cases.
+    const label = { 0x80: 'Note Off', 0x90: 'Note On', 0xa0: 'Poly Pressure', 0xb0: 'Control Change',
+                    0xc0: 'Program Change', 0xd0: 'Channel Pressure', 0xe0: 'Pitch Bend', 0xf0: 'System' };
+    let text = label[status] || ('Unknown ' + status.toString(16));
+    let cls = 'ev';
+    let line;
+
+    if (status === 0x80 || status === 0x90) {
+      const note = data[1] & 0x7f;
+      const vel = data[2] & 0x7f;
+      if (status === 0x90 && vel === 0) {
+        trackNote(chan - 1, note, -1);
+        line = 'ch' + chan + ' Note Off  ' + noteName(note) + ' (vel 0)';
+        cls = 'note-off';
+      } else if (status === 0x90) {
+        trackNote(chan - 1, note, +1);
+        line = 'ch' + chan + ' Note On   ' + noteName(note) + ' vel=' + vel;
+        cls = 'note-on';
+      } else {
+        trackNote(chan - 1, note, -1);
+        line = 'ch' + chan + ' Note Off  ' + noteName(note) + ' vel=' + vel;
+        cls = 'note-off';
+      }
+    } else if (status === 0xb0) {
+      line = 'ch' + chan + ' CC ' + (data[1] & 0x7f) + ' = ' + (data[2] & 0x7f);
+      cls = 'cc';
+    } else if (status === 0xc0) {
+      line = 'ch' + chan + ' Program ' + (data[1] & 0x7f);
+    } else if (status === 0xd0) {
+      line = 'ch' + chan + ' Channel Pressure ' + (data[1] & 0x7f);
+    } else if (status === 0xe0) {
+      const lsb = data[1] & 0x7f, msb = data[2] & 0x7f;
+      const val = ((msb << 7) | lsb) - 8192;
+      line = 'ch' + chan + ' Pitch Bend ' + val;
+    } else if (data[0] === 0xf0 || data[0] === 0xf7) {
+      // SysEx or system common / realtime
+      line = 'SysEx (' + data.length + ' bytes)';
+      cls = 'meta';
+    } else if (data[0] >= 0xf0) {
+      line = 'System ' + data[0].toString(16) + ' ' + JSON.stringify(Array.from(data.map(b => b.toString(16))));
+      cls = 'meta';
+    } else {
+      line = text + ' ' + JSON.stringify(Array.from(data.map(b => b.toString(16))));
+    }
+
+    if (raw) line = line + '   ' + hex;
+    logLine(line, cls);
+    inLive.classList.add('on');
+    setTimeout(() => inLive.classList.remove('on'), 40);
+  }
+
+  function onStateChange(evt) {
+    const port = evt.port;
+    logLine('MIDI ' + (port.connection === 'open' ? 'connected' : 'disconnected') + ': ' + (port.name || 'unnamed') + ' (' + (port.type) + ')', 'meta');
+    refreshInput();
+    refreshOutput();
+    // keep selection if possible
+    if (inputSelect.options.length === 0) {
+      inStat.textContent = 'No input monitored';
+    }
+  }
+
+  btnPause.addEventListener('click', () => {
+    paused = !paused;
+    btnPause.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  $('btnClear').addEventListener('click', () => {
+    log.textContent = '—';
+  });
+
+  inputSelect.addEventListener('change', () => {
+    monitorInput(inputSelect.value);
+  });
+
+  outputSelect.addEventListener('change', () => {
+    const id = outputSelect.value;
+    if (!id) { outStat.textContent = 'No output selected'; return; }
+    const port = midi.outputs.get(id);
+    outStat.textContent = 'Sending to ' + port.name;
+  });
+
+  $('btnRequest').addEventListener('click', async () => {
+    try {
+      if (!navigator.requestMIDIAccess) {
+        setStatus('Web MIDI API not supported in this browser.', 'error');
+        return;
+      }
+      midi = await navigator.requestMIDIAccess();
+      midi.onstatechange = onStateChange;
+      refreshInput();
+      refreshOutput();
+      setStatus('MIDI access granted.', 'connected');
+      logLine('MIDI access granted', 'meta');
+      for (const port of midi.inputs.values()) {
+        logLine('Input: ' + (port.name || 'unnamed') + (port.manufacturer ? ' · ' + port.manufacturer : ''), 'ev');
+      }
+      for (const port of midi.outputs.values()) {
+        logLine('Output: ' + (port.name || 'unnamed') + (port.manufacturer ? ' · ' + port.manufacturer : ''), 'ev');
+      }
+      if (midi.inputs.size === 0) {
+        inStat.textContent = 'No MIDI inputs found';
+        logLine('No MIDI inputs detected.', 'meta');
+      }
+      if (midi.outputs.size === 0) {
+        outStat.textContent = 'No MIDI outputs found';
+        logLine('No MIDI outputs detected.', 'meta');
+      }
+      if (inputSelect.options.length) {
+        monitorInput(inputSelect.value);
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not get MIDI access: ' + err.message, 'error');
+    }
+  });
+
+  // --- output injection ---
+  function outMessage(bytes) {
+    if (!midi || !outputSelect.value) {
+      setStatus('Select a MIDI output first.', 'error');
+      return;
+    }
+    const port = midi.outputs.get(outputSelect.value);
+    if (!port || port.state !== 'connected') {
+      setStatus('Selected output is not connected.', 'error');
+      return;
+    }
+    try {
+      port.send(bytes);
+      outLive.classList.add('on');
+      setTimeout(() => outLive.classList.remove('on'), 60);
+      logLine('TX -> ' + port.name + ' ' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join(' ').toUpperCase(), 'ev');
+    } catch (err) {
+      setStatus('Send failed: ' + err.message, 'error');
+    }
+  }
+
+  function chByte() {
+    const ch = Math.min(16, Math.max(1, parseInt($('chan').value, 10) || 1)) - 1;
+    return ch & 0x0f;
+  }
+
+  $('btnNoteOn').addEventListener('click', () => {
+    const note = parseInt(noteSel.value, 10);
+    const vel = Math.min(127, Math.max(0, parseInt($('vel').value, 10) || 0));
+    outMessage([0x90 | chByte(), note & 0x7f, vel]);
+  });
+
+  $('btnNoteOff').addEventListener('click', () => {
+    const note = parseInt(noteSel.value, 10);
+    const vel = Math.min(127, Math.max(0, parseInt($('vel').value, 10) || 0));
+    outMessage([0x80 | chByte(), note & 0x7f, vel]);
+  });
+
+  $('btnAllNotesOff').addEventListener('click', () => {
+    for (let n = 0; n < 128; n++) outMessage([0x80 | chByte(), n, 0]);
+    logLine('All notes off sent on channel ' + (chByte() + 1), 'meta');
+    activeNotes.clear();
+    renderSummary();
+  });
+
+  $('btnCC').addEventListener('click', () => {
+    const num = Math.min(127, Math.max(0, parseInt($('ccNum').value, 10) || 0));
+    const val = Math.min(127, Math.max(0, parseInt($('ccVal').value, 10) || 0));
+    outMessage([0xb0 | chByte(), num, val]);
+  });
+
+  $('btnPB').addEventListener('click', () => {
+    let val = Math.min(8191, Math.max(-8192, parseInt($('pb').value, 10) || 0));
+    val += 8192;
+    const lsb = val & 0x7f, msb = (val >> 7) & 0x7f;
+    outMessage([0xe0 | chByte(), lsb, msb]);
+  });
+
+  $('btnProg').addEventListener('click', () => {
+    const p = Math.min(127, Math.max(0, parseInt($('prog').value, 10) || 0));
+    outMessage([0xc0 | chByte(), p]);
+  });
+})();
+</script>
+</body>
+</html>
